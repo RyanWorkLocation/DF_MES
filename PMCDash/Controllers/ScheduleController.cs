@@ -1186,7 +1186,7 @@ namespace PMCDash.Controllers
                             inner join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
                             LEFT JOIN  {_ConnectStr.APSDB}.[dbo].[WIP] as w ON w.OrderID=a.OrderID AND w.OPID=a.OPID
                             left join {_ConnectStr.APSDB}.[dbo].Outsourcing as o on d.ID=o.Id
-                            where a.Scheduled = 1 {groupsearch} and a.StartTime is not NULL and a.AssignDate>DATEADD(DAY,-7,GETDate())" +
+                            where a.Scheduled = 1 {groupsearch} and a.StartTime is not NULL and a.AssignDate>DATEADD(DAY,-7,GETDate()) and a.StartTime>='2024-04-01 00:00:00'" +
                             //"and o.Outsource=0"+
                             @" ORDER BY w.WorkGroup ASC, Assign_ST ASC";
             using (var conn = new SqlConnection(_ConnectStr.Local))
@@ -1432,7 +1432,7 @@ namespace PMCDash.Controllers
                                 FROM  {_ConnectStr.APSDB}.[dbo].{Assign} as a 
                                 left join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
                                 left JOIN  {_ConnectStr.APSDB}.[dbo].[WIP] as w ON w.OrderID=a.OrderID AND w.OPID=a.OPID AND w.SeriesID=a.SeriesID
-                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) {groupsearch} and a.StartTime is not NULL and a.AssignDate>DATEADD(DAY,-7,GETDate())
+                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) {groupsearch} and a.StartTime is not NULL and a.AssignDate>DATEADD(DAY,-7,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
                                 ORDER BY w.WorkGroup ASC, Assign_ST ASC";
 
 
@@ -3140,7 +3140,7 @@ namespace PMCDash.Controllers
             for (int i = 1; i <= 7; i++)
             {
                 var Assign = "AssignmentTemp" + i.ToString();
-                sqlStr = $@"SELECT * FROM {_ConnectStr.APSDB}.dbo.{Assign}";
+                sqlStr = $@"SELECT * FROM {_ConnectStr.APSDB}.dbo.{Assign} WHERE StartTime>='2024-04-01 00:00:00'";
                 using (var conn = new SqlConnection(_ConnectStr.Local))
                 {
                     using (var comm = new SqlCommand(sqlStr, conn))

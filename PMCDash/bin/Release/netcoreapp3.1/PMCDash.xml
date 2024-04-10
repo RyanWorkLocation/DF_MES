@@ -4512,6 +4512,11 @@
             QC量測值
             </summary>
         </member>
+        <member name="P:PMCDash.Models.WorkQCReportRequest.QCMode">
+            <summary>
+            品檢模式:0=>自動 1=>手動
+            </summary>
+        </member>
         <member name="P:PMCDash.Models.RequestReportInfo.OrderID">
             <summary>
             工單編號

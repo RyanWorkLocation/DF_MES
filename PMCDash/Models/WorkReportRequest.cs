@@ -136,6 +136,11 @@ namespace PMCDash.Models
         /// </summary>
         public double QCValue { get; set; }
 
+        /// <summary>
+        /// 品檢模式:0=>自動 1=>手動
+        /// </summary>
+        public int QCMode { get; set; }
+
     }
 
     public class RequestReportInfo

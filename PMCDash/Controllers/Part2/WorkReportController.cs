@@ -1717,7 +1717,7 @@ namespace PMCDash.Controllers
         public List<OPDetail> OPDetail(string OrderID, string OPId)
         {
             string baseUrl = "http://" + Request.Host.Value + "/CADFiles/";
-
+            UserData userdata = UserInfo();
             var result = new List<OPDetail>();
 
             //if (!ValidOrder(OrderID, OPId))
@@ -1813,7 +1813,8 @@ namespace PMCDash.Controllers
                                     DeviceGroup = string.IsNullOrEmpty(SqlData["GroupName"].ToString().Trim()) ? "N/A" : SqlData["GroupName"].ToString(),
                                     //IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
                                     IsQC = QCStatus(IsQCDone(SqlData["OrderID"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
-                                    QCman = string.IsNullOrEmpty(SqlData["QCman"].ToString().Trim()) ? "N/A" : SqlData["QCman"].ToString(),
+                                    //QCman = string.IsNullOrEmpty(SqlData["QCman"].ToString().Trim()) ? "N/A" : SqlData["QCman"].ToString(),
+                                    QCman = userdata.User_Id.ToString(),
                                 });
 
                                 //若需檢驗，判斷檢驗項目
@@ -1899,7 +1900,7 @@ namespace PMCDash.Controllers
             var result = new List<QC>();
             var SqlStr = @$"SELECT a.OrderID ,a.OPID,a.MAKTX,c.WIPEvent,b.QCPoint,b.QCPointName,b.QCLSL,b.QCUSL,d.QCPointValue,d.QCToolId,d.QCunit,d.Createtime,d.Lastupdatetime
                             FROM {_ConnectStr.APSDB}.dbo.Assignment as a
-                            LEFT JOIN {_ConnectStr.MRPDB}.dbo.QCrule as b on a.OPID=b.id
+                            INNER JOIN {_ConnectStr.MRPDB}.dbo.QCrule as b on a.OPID=b.id
                             LEFT JOIN {_ConnectStr.APSDB}.dbo.QCPointValue as d ON a.OrderID=d.WorkOrderID AND b.id=d.OPID and b.QCPoint=d.QCPoint
                             LEFT JOIN {_ConnectStr.APSDB}.dbo.WIP as c on a.OrderID=c.OrderID AND a.OPID=c.OPID
                             WHERE a.OrderID= @OrderID AND a.OPID= @OPId";
@@ -2522,30 +2523,67 @@ namespace PMCDash.Controllers
             //{
             //    return Unauthorized();
             //}
-
             string result = "Update Failed!";
             UserData userData = UserInfo();
             int EffectRow = 0;
-            var SqlStr = @$"IF NOT EXISTS(SELECT * FROM {_ConnectStr.APSDB}.[dbo].[QCPointValue] WHERE WorkOrderID = @OrderID AND OPID = @OPId AND QCPoint = (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName))
+            var SqlStr = @$"IF NOT EXISTS(SELECT * FROM [QCPointValue] WHERE WorkOrderID = @OrderID AND OPID = @OPId AND QCPoint = (SELECT TOP(1) QCPoint
+                                      FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] as a
+                                      LEFT join {_ConnectStr.MRPDB}.[dbo].Process as b
+                                      on a.ProcessID = b.ProcessNo
+                                      where b.ID=@OPId and a.QCPointName=@QCPointName
+                                      order by ProcessName,QCPoint))
                                 BEGIN 
-                                     INSERT INTO {_ConnectStr.APSDB}.[dbo].[QCPointValue]
-                                     ([WorkOrderID], [OPID], [MAKTX], [QCPoint], [QCPointValue], [QCToolId], [QCunit], [Createtime], [Lastupdatetime]) 
+                                     INSERT INTO [QCPointValue]
+                                     ([WorkOrderID], [OPID], [MAKTX], [QCPoint], [QCPointValue], [QCToolId], [QCunit], [Createtime], [Lastupdatetime],[QCman],[QCMode]) 
                                      VALUES
                                      (@OrderID, @OPId, @MAKTX, 
-                                     (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName), 
-                                     (@QCPointValue),
+                                     (SELECT TOP(1) QCPoint
+                                      FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] as a
+                                      LEFT join {_ConnectStr.MRPDB}.[dbo].Process as b
+                                      on a.ProcessID = b.ProcessNo
+                                      where b.ID=@OPId and a.QCPointName=@QCPointName
+                                      order by ProcessName,QCPoint), 
+                                     @QCValue,
                                      @QCToolId, 
-                                     (SELECT TOP(1)[unit] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE MAKTX=@MAKTX AND opid=@OPId AND QCPointName=@QCPointName)
-                                     ,GETDATE() ,GETDATE()) 
+                                     'mm'
+                                     ,GETDATE() ,GETDATE(),@UserName,@QCMode ) 
                                 END 
                            ELSE
                                 BEGIN
-                                     UPDATE {_ConnectStr.APSDB}.[dbo].[QCPointValue]
-                                     SET QCPointValue = (@QCPointValue),
-                                     Lastupdatetime = GETDATE()
+                                     UPDATE [QCPointValue]
+                                     SET QCPointValue = @QCValue,
+                                     QCunit='mm',
+                                     Lastupdatetime = GETDATE(), QCman=@UserName,QCMode = @QCMode
                                      WHERE WorkOrderID = @OrderID AND OPID = @OPId AND MAKTX = @MAKTX 
-                                     AND QCPoint = (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName)
+                                     AND QCPoint = (SELECT TOP(1) QCPoint
+                                      FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] as a
+                                      LEFT join {_ConnectStr.MRPDB}.[dbo].Process as b
+                                      on a.ProcessID = b.ProcessNo
+                                      where b.ID=@OPId and a.QCPointName=@QCPointName
+                                      order by ProcessName,QCPoint)
                                 END";
+
+            ////Ver1. SQL語法
+            //SqlStr = @$"IF NOT EXISTS(SELECT * FROM {_ConnectStr.APSDB}.[dbo].[QCPointValue] WHERE WorkOrderID = @OrderID AND OPID = @OPId AND QCPoint = (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName))
+            //                    BEGIN 
+            //                         INSERT INTO {_ConnectStr.APSDB}.[dbo].[QCPointValue]
+            //                         ([WorkOrderID], [OPID], [MAKTX], [QCPoint], [QCPointValue], [QCToolId], [QCunit], [Createtime], [Lastupdatetime]) 
+            //                         VALUES
+            //                         (@OrderID, @OPId, @MAKTX, 
+            //                         (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName), 
+            //                         (@QCPointValue),
+            //                         @QCToolId, 
+            //                         (SELECT TOP(1)[unit] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE MAKTX=@MAKTX AND opid=@OPId AND QCPointName=@QCPointName)
+            //                         ,GETDATE() ,GETDATE()) 
+            //                    END 
+            //               ELSE
+            //                    BEGIN
+            //                         UPDATE {_ConnectStr.APSDB}.[dbo].[QCPointValue]
+            //                         SET QCPointValue = (@QCPointValue),
+            //                         Lastupdatetime = GETDATE()
+            //                         WHERE WorkOrderID = @OrderID AND OPID = @OPId AND MAKTX = @MAKTX 
+            //                         AND QCPoint = (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName)
+            //                    END";
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
                 using (var comm = new SqlCommand(SqlStr, conn))
@@ -2557,7 +2595,9 @@ namespace PMCDash.Controllers
                     comm.Parameters.Add(("@MAKTX"), SqlDbType.NVarChar).Value = request.ProductId;
                     comm.Parameters.Add(("@QCPointName"), SqlDbType.NVarChar).Value = request.QCPointName;
                     comm.Parameters.Add(("@QCToolId"), SqlDbType.NVarChar).Value = request.QCToolID;
-                    comm.Parameters.Add(("@QCPointValue"), SqlDbType.NVarChar).Value = request.QCValue;
+                    comm.Parameters.Add(("@UserName"), SqlDbType.NVarChar).Value = userData.EmpolyeeName;
+                    comm.Parameters.Add(("@QCMode"), SqlDbType.NVarChar).Value = request.QCMode == 0 ? "Auto" : "Manual";
+                    comm.Parameters.Add(("@QCValue"), SqlDbType.Float).Value = request.QCValue;
                     EffectRow = Convert.ToInt32(comm.ExecuteNonQuery());
                 }
             }
@@ -2570,6 +2610,7 @@ namespace PMCDash.Controllers
                 result = "Update Failed!";
             }
 
+            //更新QCAssignment，判斷檢測點是否都有量測值
             var checkQC = QCList(request.OrderID, request.OPId.ToString().Trim());
 
             if (!checkQC.Exists(x => x.QCPointValue == "N/A"))
