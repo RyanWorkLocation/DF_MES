@@ -202,7 +202,7 @@ namespace PMCDash.Controllers
                             ,e.GroupSeq	         
 							,d.ID as DeviceID
                             from {_ConnectStr.APSDB}.[dbo].Assignment as a
-	                        inner join {_ConnectStr.APSDB}.[dbo].WIP as b on a.OrderID=b.OrderID and a.OPID=b.OPID
+	                        inner join {_ConnectStr.APSDB}.[dbo].WIP as b on a.SeriesID=b.SeriesID
 	                        inner join {_ConnectStr.MRPDB}.dbo.Part as c on a.MAKTX=c.Number
 	                        inner join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
 	                        left join {_ConnectStr.AccuntDB}.dbo.GroupDevice as e on d.ID=e.DeviceId
@@ -731,7 +731,7 @@ namespace PMCDash.Controllers
                     //cmd1 = $"where b.WIPEvent!=3";
                     //cmd2 = $"where WIPEvent={Event} and bb.GroupSeq=@GroupName and aa.remark=@MachineName";
                     cmd1 = $"where b.WIPEvent={Event}";
-                    cmd2 = $"where bb.GroupSeq=@GroupName and aa.remark=@MachineName";
+                    cmd2 = $"where bb.GroupSeq=@GroupName and aa.remark=@MachineName and  aa.TOTALDONE=aa.Range";
                 }
                 else
                 {
@@ -748,7 +748,7 @@ namespace PMCDash.Controllers
                     //cmd1 = $"where b.WIPEvent!=3";
                     //cmd2 = $"where WIPEvent={Event} and bb.GroupSeq=@GroupName and aa.remark=@MachineName";
                     cmd1 = $"where b.WIPEvent={Event}";
-                    cmd2 = $"where bb.GroupSeq=@GroupName and aa.remark=@MachineName";
+                    cmd2 = $"where bb.GroupSeq=@GroupName and aa.remark=@MachineName and  aa.TOTALDONE=aa.Range";
 
                 }
                 else
@@ -772,9 +772,10 @@ namespace PMCDash.Controllers
 	                        ,a.OrderQTY,b.QtyGood,b.QtyBad,b.WIPEvent,b.StartTime as wipStartTime,b.EndTime as wipEndTime
                             ,(select top(1) [user_name] from {_ConnectStr.AccuntDB}.dbo.[User] where [user_id]=f.QCman) as QCman
                             ,g.CustomerInfo
-							,d.ID as DeviceID
+							,d.ID as DeviceID,
+                            (SELECT COUNT(*) FROM {_ConnectStr.APSDB}.dbo.WIP WHERE WIPEvent=3 AND OrderID=a.OrderID) AS TOTALDONE
 	                        from {_ConnectStr.APSDB}.[dbo].Assignment as a
-	                        left join {_ConnectStr.APSDB}.[dbo].WIP as b on a.OrderID=b.OrderID and a.OPID=b.OPID
+	                        left join {_ConnectStr.APSDB}.[dbo].WIP as b on a.SeriesID=b.SeriesID
                             left join {_ConnectStr.APSDB}.[dbo].[OrderOverview] as ord on a.ERPOrderID=ord.OrderID
 	                        left join {_ConnectStr.MRPDB}.dbo.Part as c on a.MAKTX=c.Number
 	                        left join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
@@ -782,10 +783,10 @@ namespace PMCDash.Controllers
                             left join {_ConnectStr.APSDB}.[dbo].OrderOverview as g on a.ERPOrderID=g.OrderID
 	                        {cmd1} and a.WorkGroup is not null) as a
                         )
-                        SELECT TOP(5)*
+                        SELECT TOP(CASE WHEN (SELECT COUNT(*) FROM cte) > 5 THEN 5 ELSE (SELECT COUNT(*) FROM cte) END)*
                         FROM cte as aa
 						left join {_ConnectStr.AccuntDB}.dbo.GroupDevice as bb on aa.DeviceID=bb.DeviceId
-						{cmd2}
+						{cmd2} 
                         order by OrderID";
 
             using (var conn = new SqlConnection(_ConnectStr.Local))
@@ -904,7 +905,7 @@ namespace PMCDash.Controllers
                     //cmd2 = $"where WIPEvent={Event} and bb.GroupSeq=@GroupName";
 
                     cmd1 = $"where b.WIPEvent={Event}";
-                    cmd2 = $"where bb.GroupSeq=@GroupName";
+                    cmd2 = $"where bb.GroupSeq=@GroupName and  aa.TOTALDONE=aa.Range";
 
 
                 }
@@ -925,7 +926,7 @@ namespace PMCDash.Controllers
                     //cmd2 = $"where WIPEvent={Event} and bb.GroupSeq=@GroupName";
 
                     cmd1 = $"where b.WIPEvent={Event}";
-                    cmd2 = $"where bb.GroupSeq=@GroupName";
+                    cmd2 = $"where bb.GroupSeq=@GroupName and  aa.TOTALDONE=aa.Range";
                 }
                 else
                 {
@@ -937,35 +938,54 @@ namespace PMCDash.Controllers
                 }
             }
             SqlStr = @$"WITH cte AS
-                        (
-                           SELECT
-                                 ROW_NUMBER() OVER (PARTITION BY OrderID ORDER BY [Range]) AS rn,*
-                           FROM 
-                           (select 
-	                        ord.OrderID as ERPOrderID,a.OrderID,a.OPID,a.[Range],a.OPLTXA1,a.MAKTX,c.[Name],a.StartTime,a.EndTime,a.AssignDate,a.WorkGroup as remark,d.GroupName
-	                        ,(select top(1) [user_name] from {_ConnectStr.AccuntDB}.dbo.[User] where [user_id]=a.Operator) as [user_name]
-	                        ,Progress = cast( (cast(b.QtyGood as float) + cast(b.QtyBad as float)) / cast(a.OrderQTY as float) * 100 as int)
-	                        ,RemainingCount = (a.OrderQTY - b.QtyTol)
-	                        ,a.OrderQTY,b.QtyGood,b.QtyBad,b.WIPEvent,b.StartTime as wipStartTime,b.EndTime as wipEndTime
-                            ,(select top(1) [user_name] from {_ConnectStr.AccuntDB}.dbo.[User] where [user_id]=f.QCman) as QCman
-                            ,g.CustomerInfo
-							,d.ID as DeviceID
-                            ,(SELECT COUNT(*) FROM {_ConnectStr.MRPDB}.dbo.QCrule as qcr WHERE qcr.id=a.OPID) AS QC_count
-                            ,(select COUNT(*) FROM {_ConnectStr.APSDB}.dbo.QCPointValue as qcpv where qcpv.WorkOrderID=a.OrderID and qcpv.OPID=a.OPID and qcpv.MAKTX=a.MAKTX) AS QCv_count
-	                        from {_ConnectStr.APSDB}.[dbo].Assignment as a
-	                        inner join {_ConnectStr.APSDB}.[dbo].WIP as b on a.OrderID=b.OrderID and a.OPID=b.OPID
-                            left join {_ConnectStr.APSDB}.[dbo].[OrderOverview] as ord on a.ERPOrderID=ord.OrderID
-	                        left join {_ConnectStr.MRPDB}.dbo.Part as c on a.MAKTX=c.Number
-	                        left join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
-                            left join {_ConnectStr.APSDB}.[dbo].QCAssignment as f on a.OrderID=f.WorkOrderID and a.OPID=f.OPID
-                            left join {_ConnectStr.APSDB}.[dbo].OrderOverview as g on a.ERPOrderID=g.OrderID
-	                        {cmd1}  and a.WorkGroup is not null) as a
-                        )
-                        SELECT  TOP(5)*
-                        FROM cte as aa
-						left join {_ConnectStr.AccuntDB}.dbo.GroupDevice as bb on aa.DeviceID=bb.DeviceId
-						{cmd2}
-                        order by OrderID";
+                    (
+                        SELECT
+                            ROW_NUMBER() OVER (PARTITION BY a.OrderID ORDER BY a.[Range]) AS rn,
+                            ord.OrderID as ERPOrderID,
+                            a.OrderID,
+                            a.OPID,
+                            a.[Range],
+                            a.OPLTXA1,
+                            a.MAKTX,
+                            c.[Name],
+                            a.StartTime,
+                            a.EndTime,
+                            a.AssignDate,
+                            a.WorkGroup as remark,
+                            d.GroupName,
+                            u1.[user_name] as [user_name],
+                            CAST((CAST(b.QtyGood as float) + CAST(b.QtyBad as float)) / CAST(a.OrderQTY as float) * 100 as int) as Progress,
+                            a.OrderQTY - b.QtyTol as RemainingCount,
+                            a.OrderQTY,
+                            b.QtyGood,
+                            b.QtyBad,
+                            b.WIPEvent,
+                            b.StartTime as wipStartTime,
+                            b.EndTime as wipEndTime,
+                            u2.[user_name] as QCman,
+                            g.CustomerInfo,
+                            d.ID as DeviceID,
+                            qcr.QC_count,
+                            qcpv.QCv_count,
+                        (SELECT COUNT(*) FROM {_ConnectStr.APSDB}.dbo.WIP WHERE WIPEvent=3 AND OrderID=a.OrderID) AS TOTALDONE
+                        FROM {_ConnectStr.APSDB}.[dbo].Assignment as a
+                        INNER JOIN {_ConnectStr.APSDB}.[dbo].WIP as b on a.SeriesID=b.SeriesID
+                        LEFT JOIN {_ConnectStr.APSDB}.[dbo].[OrderOverview] as ord on a.ERPOrderID = ord.OrderID
+                        LEFT JOIN {_ConnectStr.MRPDB}.dbo.Part as c on a.MAKTX = c.Number
+                        LEFT JOIN {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup = d.remark
+                        LEFT JOIN {_ConnectStr.AccuntDB}.dbo.[User] as u1 on a.Operator = u1.[user_id]
+                        LEFT JOIN {_ConnectStr.APSDB}.[dbo].QCAssignment as f on a.OrderID = f.WorkOrderID and a.OPID = f.OPID
+                        LEFT JOIN {_ConnectStr.AccuntDB}.dbo.[User] as u2 on f.QCman = u2.[user_id]
+                        LEFT JOIN {_ConnectStr.APSDB}.[dbo].OrderOverview as g on a.ERPOrderID = g.OrderID
+                        LEFT JOIN (SELECT id, COUNT(*) as QC_count FROM {_ConnectStr.MRPDB}.dbo.QCrule GROUP BY id) as qcr on qcr.id = a.OPID
+                        LEFT JOIN (SELECT WorkOrderID, OPID, MAKTX, COUNT(*) as QCv_count FROM {_ConnectStr.APSDB}.dbo.QCPointValue GROUP BY WorkOrderID, OPID, MAKTX) as qcpv on qcpv.WorkOrderID = a.OrderID and qcpv.OPID = a.OPID and qcpv.MAKTX = a.MAKTX
+                        {cmd1} AND a.WorkGroup IS NOT NULL
+                    )
+                    SELECT TOP(CASE WHEN (SELECT COUNT(*) FROM cte) > 5 THEN 5 ELSE (SELECT COUNT(*) FROM cte) END) *
+                    FROM cte as aa
+                    LEFT JOIN {_ConnectStr.AccuntDB}.dbo.GroupDevice as bb on aa.DeviceID = bb.DeviceId
+                    {cmd2} 
+                    ORDER BY aa.OrderID";
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
                 using (var comm = new SqlCommand(SqlStr, conn))
@@ -1081,27 +1101,22 @@ namespace PMCDash.Controllers
             {
                 if (Event != "3")
                 {
-                    //cmd1 = $"where b.WIPEvent!=3";
-                    //cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
-
                     cmd1 = $"where b.WIPEvent={Event}";
-                    cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
+                    cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName AND aa.TOTALDONE=aa.Range";
                 }
                 else
                 {
-                    //cmd1 = $"where b.WIPEvent=3";
-                    //cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
-
                     cmd1 = $"where b.WIPEvent={Event}";
                     cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
                 }
+                
             }
             else
             {
                 if (Event != "3")
                 {
                     cmd1 = $"where b.WIPEvent!=3";
-                    cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
+                    cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName AND aa.TOTALDONE=aa.Range";
                     //cmd2 = $"where rn=1 and WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
                 }
                 else
@@ -1112,54 +1127,56 @@ namespace PMCDash.Controllers
             }
 
             SqlStr = @$";WITH cte AS
-                        (
-                            SELECT
-                                ROW_NUMBER() OVER (PARTITION BY OrderID ORDER BY [Range]) AS rn,
-                                *
-                            FROM 
-                            (
-                                SELECT 
-                                    ord.OrderID as ERPOrderID,
-                                    a.OrderID,
-                                    a.OPID,
-                                    a.[Range],
-                                    a.OPLTXA1,
-                                    a.MAKTX,
-                                    c.[Name],
-                                    a.StartTime,
-                                    a.EndTime,
-                                    a.AssignDate,
-                                    a.WorkGroup as remark,
-                                    d.GroupName,
-                                    (SELECT TOP(1) [user_name] FROM {_ConnectStr.AccuntDB}.dbo.[User] WHERE [user_id]=a.Operator) as [user_name],
-                                    Progress = CAST((CAST(b.QtyGood as float) + CAST(b.QtyBad as float)) / CAST(a.OrderQTY as float) * 100 as int),
-                                    RemainingCount = (a.OrderQTY - b.QtyTol),
-                                    a.OrderQTY,
-                                    b.QtyGood,
-                                    b.QtyBad,
-                                    b.WIPEvent,
-                                    b.StartTime as wipStartTime,
-                                    b.EndTime as wipEndTime,
-                                    (SELECT TOP(1) [user_name] FROM {_ConnectStr.AccuntDB}.dbo.[User] WHERE [user_id]=f.QCman) as QCman,
-                                    g.CustomerInfo,
-                                    d.ID as DeviceID,
-                                    (SELECT COUNT(*) FROM {_ConnectStr.MRPDB}.dbo.QCrule as qcr WHERE qcr.id=a.OPID) AS QC_count,
-                                    (SELECT COUNT(*) FROM {_ConnectStr.APSDB}.dbo.QCPointValue as qcpv WHERE qcpv.WorkOrderID=a.OrderID and qcpv.OPID=a.OPID and qcpv.MAKTX=a.MAKTX) AS QCv_count
-                                FROM {_ConnectStr.APSDB}.[dbo].Assignment as a
-                                INNER JOIN {_ConnectStr.APSDB}.[dbo].WIP as b on a.OrderID=b.OrderID and a.OPID=b.OPID
-                                LEFT JOIN {_ConnectStr.APSDB}.[dbo].[OrderOverview] as ord on a.ERPOrderID=ord.OrderID
-                                LEFT JOIN {_ConnectStr.MRPDB}.[dbo].[Part] as c on a.MAKTX=c.Number
-                                LEFT JOIN {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
-                                LEFT JOIN {_ConnectStr.APSDB}.[dbo].QCAssignment as f on a.OrderID=f.WorkOrderID and a.OPID=f.OPID
-                                LEFT JOIN {_ConnectStr.APSDB}.[dbo].OrderOverview as g on a.ERPOrderID=g.OrderID
-                                {cmd1} and a.Workgroup is not null
-                            ) as a
-                        )
-                        SELECT *
-                        FROM cte as aa
-                        LEFT JOIN {_ConnectStr.AccuntDB}.dbo.GroupDevice as bb on aa.DeviceID=bb.DeviceId
-                        {cmd2}
-                        ORDER BY OrderID, [Range]";
+                (
+                    SELECT
+                        ROW_NUMBER() OVER (PARTITION BY OrderID ORDER BY [Range]) AS rn,
+                        *
+                    FROM 
+                    (
+                        SELECT 
+                            ord.OrderID as ERPOrderID,
+                            a.OrderID,
+                            a.OPID,
+                            a.[Range],
+                            a.OPLTXA1,
+                            a.MAKTX,
+                            c.[Name],
+                            a.StartTime,
+                            a.EndTime,
+                            a.AssignDate,
+                            a.WorkGroup as remark,
+                            d.GroupName,
+                            (SELECT TOP(1) [user_name] FROM {_ConnectStr.AccuntDB}.dbo.[User] WHERE [user_id]=a.Operator) as [user_name],
+                            Progress = CAST((CAST(b.QtyGood as float) + CAST(b.QtyBad as float)) / CAST(a.OrderQTY as float) * 100 as int),
+                            RemainingCount = (a.OrderQTY - b.QtyTol),
+                            a.OrderQTY,
+                            b.QtyGood,
+                            b.QtyBad,
+                            b.WIPEvent,
+                            b.StartTime as wipStartTime,
+                            b.EndTime as wipEndTime,
+                            (SELECT TOP(1) [user_name] FROM {_ConnectStr.AccuntDB}.dbo.[User] WHERE [user_id]=f.QCman) as QCman,
+                            g.CustomerInfo,
+                            d.ID as DeviceID,
+                            (SELECT COUNT(*) from {_ConnectStr.APSDB}.dbo.WIP where WIPEvent=3 and OrderID='{OrderId}') AS TOTALDONE,
+                            (SELECT COUNT(*) FROM {_ConnectStr.MRPDB}.dbo.QCrule as qcr WHERE qcr.id=a.OPID) AS QC_count,
+                            (SELECT COUNT(*) FROM {_ConnectStr.APSDB}.dbo.QCPointValue as qcpv WHERE qcpv.WorkOrderID=a.OrderID and qcpv.OPID=a.OPID and qcpv.MAKTX=a.MAKTX) AS QCv_count
+                        FROM {_ConnectStr.APSDB}.[dbo].Assignment as a
+                        INNER JOIN {_ConnectStr.APSDB}.[dbo].WIP as b on a.SeriesID=b.SeriesID
+                        LEFT JOIN {_ConnectStr.APSDB}.[dbo].[OrderOverview] as ord on a.ERPOrderID=ord.OrderID
+                        LEFT JOIN {_ConnectStr.MRPDB}.[dbo].[Part] as c on a.MAKTX=c.Number
+                        LEFT JOIN {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
+                        LEFT JOIN {_ConnectStr.APSDB}.[dbo].QCAssignment as f on a.OrderID=f.WorkOrderID and a.OPID=f.OPID
+                        LEFT JOIN {_ConnectStr.APSDB}.[dbo].OrderOverview as g on a.ERPOrderID=g.OrderID
+                        {cmd1} and a.Workgroup is not null
+                    ) as a
+                )
+                SELECT *
+                FROM cte as aa
+                LEFT JOIN {_ConnectStr.AccuntDB}.dbo.GroupDevice as bb on aa.DeviceID=bb.DeviceId
+                {cmd2}
+                
+                ORDER BY OrderID, [Range]";
 
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
@@ -1842,7 +1859,7 @@ namespace PMCDash.Controllers
 
             foreach (var item in result)
             {
-                //判斷機台是否有委外廠商名稱
+                //判斷機台是否有委外廠商名稱，若有則顯示委外廠商名稱
                 bool hasBrackets = item.Deviec.Contains("(") && item.Deviec.Contains(")");
                 if (hasBrackets)
                 {
@@ -2526,14 +2543,14 @@ namespace PMCDash.Controllers
             string result = "Update Failed!";
             UserData userData = UserInfo();
             int EffectRow = 0;
-            var SqlStr = @$"IF NOT EXISTS(SELECT * FROM [QCPointValue] WHERE WorkOrderID = @OrderID AND OPID = @OPId AND QCPoint = (SELECT TOP(1) QCPoint
+            var SqlStr = @$"IF NOT EXISTS(SELECT * FROM {_ConnectStr.APSDB}.[dbo].[QCPointValue] WHERE WorkOrderID = @OrderID AND OPID = @OPId AND QCPoint = (SELECT TOP(1) QCPoint
                                       FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] as a
                                       LEFT join {_ConnectStr.MRPDB}.[dbo].Process as b
                                       on a.ProcessID = b.ProcessNo
                                       where b.ID=@OPId and a.QCPointName=@QCPointName
                                       order by ProcessName,QCPoint))
                                 BEGIN 
-                                     INSERT INTO [QCPointValue]
+                                     INSERT INTO {_ConnectStr.APSDB}.[dbo].[QCPointValue]
                                      ([WorkOrderID], [OPID], [MAKTX], [QCPoint], [QCPointValue], [QCToolId], [QCunit], [Createtime], [Lastupdatetime],[QCman],[QCMode]) 
                                      VALUES
                                      (@OrderID, @OPId, @MAKTX, 
@@ -2550,10 +2567,10 @@ namespace PMCDash.Controllers
                                 END 
                            ELSE
                                 BEGIN
-                                     UPDATE [QCPointValue]
+                                     UPDATE {_ConnectStr.APSDB}.[dbo].[QCPointValue]
                                      SET QCPointValue = @QCValue,
                                      QCunit='mm',
-                                     Lastupdatetime = GETDATE(), QCman=@UserName,QCMode = @QCMode
+                                     Lastupdatetime = GETDATE(), QCman=@UserName,QCMode = @QCMode, QCToolId = @QCToolId
                                      WHERE WorkOrderID = @OrderID AND OPID = @OPId AND MAKTX = @MAKTX 
                                      AND QCPoint = (SELECT TOP(1) QCPoint
                                       FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] as a
@@ -2610,34 +2627,34 @@ namespace PMCDash.Controllers
                 result = "Update Failed!";
             }
 
-            //更新QCAssignment，判斷檢測點是否都有量測值
-            var checkQC = QCList(request.OrderID, request.OPId.ToString().Trim());
+            ////更新QCAssignment，判斷檢測點是否都有量測值
+            //var checkQC = QCList(request.OrderID, request.OPId.ToString().Trim());
 
-            if (!checkQC.Exists(x => x.QCPointValue == "N/A"))
-            {
-                SqlStr = @$"update QCAssignment set IsQC=1,QCman=@Userid where WorkOrderID=@OrderID and opid=@opid";
-                using (var conn = new SqlConnection(_ConnectStr.Local))
-                {
-                    using (var comm = new SqlCommand(SqlStr, conn))
-                    {
-                        if (conn.State != ConnectionState.Open)
-                            conn.Open();
-                        comm.Parameters.Add(("@OrderID"), SqlDbType.NVarChar).Value = request.OrderID;
-                        comm.Parameters.Add(("@opid"), SqlDbType.Float).Value = request.OPId;
-                        comm.Parameters.Add(("@Userid"), SqlDbType.NVarChar).Value = userData.User_Id;
+            //if (!checkQC.Exists(x => x.QCPointValue == "N/A"))
+            //{
+            //    SqlStr = @$"update QCAssignment set IsQC=1,QCman=@Userid where WorkOrderID=@OrderID and opid=@opid";
+            //    using (var conn = new SqlConnection(_ConnectStr.Local))
+            //    {
+            //        using (var comm = new SqlCommand(SqlStr, conn))
+            //        {
+            //            if (conn.State != ConnectionState.Open)
+            //                conn.Open();
+            //            comm.Parameters.Add(("@OrderID"), SqlDbType.NVarChar).Value = request.OrderID;
+            //            comm.Parameters.Add(("@opid"), SqlDbType.Float).Value = request.OPId;
+            //            comm.Parameters.Add(("@Userid"), SqlDbType.NVarChar).Value = userData.User_Id;
 
-                        EffectRow = Convert.ToInt32(comm.ExecuteNonQuery());
-                    }
-                }
-                if (EffectRow > 0)
-                {
-                    result = "Update QCPoint & QCman Successful!";
-                }
-                else
-                {
-                    result = "Update QCPoint & Update QCman Failed!";
-                }
-            }
+            //            EffectRow = Convert.ToInt32(comm.ExecuteNonQuery());
+            //        }
+            //    }
+            //    if (EffectRow > 0)
+            //    {
+            //        result = "Update QCPoint & QCman Successful!";
+            //    }
+            //    else
+            //    {
+            //        result = "Update QCPoint & Update QCman Failed!";
+            //    }
+            //}
 
             return result;
         }
@@ -2747,14 +2764,18 @@ namespace PMCDash.Controllers
         private string IsQCDone_2(string requiredQty, string DoneQty)
         {
             string ans = "N/A";
-            if (int.Parse(requiredQty) != 0)
+            if (requiredQty != "" && DoneQty != "")
             {
-                ans = "False";//未完成，需檢驗
+                if (int.Parse(requiredQty) != 0)
+                {
+                    ans = "False";//未完成，需檢驗
+                }
+                else if (int.Parse(requiredQty) - int.Parse(DoneQty) == 0)
+                {
+                    ans = "Ture";//已完成，無須檢驗
+                }
             }
-            else if (int.Parse(requiredQty) - int.Parse(DoneQty) == 0)
-            {
-                ans = "Ture";//已完成，無須檢驗
-            }
+            
             return ans;
         }
 

@@ -384,7 +384,6 @@ namespace PMCDash.Controllers
         /// </summary>
         /// <param name="mode">【0:原始排程、1:交期優先-推薦權重、2:交期優先-自訂權重、3:機台優先、4:插單優先、5:手動排程、6:設備故障排程重排、7:設備故障排程延後工單右移】</param>
         /// <returns></returns>
-        //[ApiExplorerSettings(IgnoreApi = true)]
         [HttpGet("DashboardPreview/{mode}")]
         public ActionResponse<List<Schedule>> DashboardPreview(string mode)
         {
@@ -410,8 +409,8 @@ namespace PMCDash.Controllers
                                 FROM {_ConnectStr.APSDB}.[dbo].{Assign} as a
                                 LEFT JOIN {_ConnectStr.APSDB}.[dbo].WIP as w ON (a.SeriesID=w.SeriesID)
                                 where (w.EndTime is null or w.EndTime > GETDATE() - 30) and (w.WIPEvent is null or w.WIPEvent!=3)
-                                and substring(a.ERPOrderID,2,4)>=DATEADD(MONTH, -3, GETDATE())";
-
+                                and (a.EndTime is null or a.EndTime > GETDATE() - 30)";
+                //var temp = "substring(a.ERPOrderID,2,4)>=DATEADD(MONTH, -3, GETDATE())";
                 SqlStr += " ORDER BY a.WorkGroup, a.StartTime DESC";
                 try
                 {
@@ -1186,7 +1185,7 @@ namespace PMCDash.Controllers
                             inner join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
                             LEFT JOIN  {_ConnectStr.APSDB}.[dbo].[WIP] as w ON w.OrderID=a.OrderID AND w.OPID=a.OPID
                             left join {_ConnectStr.APSDB}.[dbo].Outsourcing as o on d.ID=o.Id
-                            where a.Scheduled = 1 {groupsearch} and a.StartTime is not NULL and a.AssignDate>DATEADD(DAY,-7,GETDate()) and a.StartTime>='2024-04-01 00:00:00'" +
+                            where a.Scheduled = 1 {groupsearch} and a.StartTime is not NULL and a.AssignDate>DATEADD(DAY,-60,GETDate()) and a.StartTime>='2024-04-01 00:00:00'" +
                             //"and o.Outsource=0"+
                             @" ORDER BY w.WorkGroup ASC, Assign_ST ASC";
             using (var conn = new SqlConnection(_ConnectStr.Local))
@@ -1432,7 +1431,7 @@ namespace PMCDash.Controllers
                                 FROM  {_ConnectStr.APSDB}.[dbo].{Assign} as a 
                                 left join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
                                 left JOIN  {_ConnectStr.APSDB}.[dbo].[WIP] as w ON w.OrderID=a.OrderID AND w.OPID=a.OPID AND w.SeriesID=a.SeriesID
-                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) {groupsearch} and a.StartTime is not NULL and a.AssignDate>DATEADD(DAY,-7,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
+                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) {groupsearch} and a.StartTime is not NULL and a.AssignDate>DATEADD(DAY,-60,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
                                 ORDER BY w.WorkGroup ASC, Assign_ST ASC";
 
 
@@ -2631,6 +2630,7 @@ namespace PMCDash.Controllers
         [HttpPost("GenerateInitialSolutionforDueDayFirst")]
         public ActionResponse<string> GenerateInitialSolutionforDueDayFirst([FromBody] ScheduleDateRangeRequest request)
         {
+            DateTime starttime = DateTime.Now;
             if (request.SelectOrders.Count <= 0)
             {
                 throw new Exception("No work order, process selected");
@@ -2660,9 +2660,9 @@ namespace PMCDash.Controllers
                     break;
             }
 
-            //原始排程
+            //原始排程(已排程，未完工)
             var originSchedule = new List<ScheduleDto>();
-            var sqlStr = $@"select a.OrderID, a.OPID, Optime = a.HumanOpTime+(a.MachOpTime)*a.OrderQTY, a.StartTime, a.EndTime, a.WorkGroup
+            var sqlStr = $@"select a.OrderID, a.OPID, DATEDIFF(MINUTE,a.StartTime,a.EndTime) as Optime, a.StartTime, a.EndTime, a.WorkGroup
                             from {_ConnectStr.APSDB}.dbo.Assignment as a 
                             inner join {_ConnectStr.APSDB}.dbo.WIP as b on a.SeriesID=b.SeriesID
                             where a.Scheduled = 1 and b.WIPEvent!=3 and a.StartTime is not NULL";
@@ -2692,6 +2692,7 @@ namespace PMCDash.Controllers
             }
 
             var PMC = new DelayMthod(chromosomesCount, devices);
+            //挑選未開工且預交日期在所選區間的製程
             var FirSolution = PMC.CreateDataSet(request.StartTime, request.EndTime);
             if (FirSolution.Count != 0)
             {
@@ -2701,14 +2702,35 @@ namespace PMCDash.Controllers
                     var requestOrderSets = new List<GaSchedule>();
 
                     if (FirSolution.Count != 0)
+                    {
                         foreach (var item in FirSolution)
                         {
-                            if (request.SelectOrders.Exists(x => x.OrderID == item.OrderID && x.OPID == item.OPID.ToString()))
+                            //05.24 Ryan修改:有排程過或有在勾選名單內
+                            if(item.Scheduled==1)
+                            {
+                                requestOrderSets.Add(item);
+                            }
+                            else if(request.SelectOrders.Exists(x => x.OrderID == item.OrderID && x.OPID == item.OPID.ToString()))
                             {
                                 var id = FirSolution.FindIndex(x => x.OrderID == item.OrderID && x.OPID == item.OPID);
-                                requestOrderSets.Add(FirSolution[id]);
+                                if(!requestOrderSets.Exists(x=>x.OrderID == FirSolution[id].OrderID && x.OPID == FirSolution[id].OPID))
+                                {
+                                    requestOrderSets.Add(FirSolution[id]);
+                                }
+                                
                             }
+                            ////原始:勾選製程納入排程運算需求列表
+                            //if (request.SelectOrders.Exists(x => x.OrderID == item.OrderID && x.OPID == item.OPID.ToString()))
+                            //{
+                            //    var id = FirSolution.FindIndex(x => x.OrderID == item.OrderID && x.OPID == item.OPID);
+                            //    requestOrderSets.Add(FirSolution[id]);
+                            //}
+                            //requestOrderSets.Add(item);
                         }
+                    }
+
+
+
 
                     //機台故障資訊
                     var mcbkresult = new List<DelayScheduleOP>();
@@ -2796,11 +2818,19 @@ namespace PMCDash.Controllers
                         var train = PMC.Scheduled(sequence);
                         ChromosomeList.Add(i, train);
                     }
-
+                    int noImprovementCount = 0;
+                    int maxNoImprovementIterations = 10; // 最大無改進迭代次數
+                    int recorditeration = 0;
                     //iteration迭代
                     for (int i = 0; i < iteration; i++)
                     {
-                        PMC.EvaluationFitness(ref ChromosomeList);
+                        PMC.EvaluationFitness(ref ChromosomeList,ref noImprovementCount);
+                        // 如果無改進迭代次數達到最大值，提前終止迭代
+                        if (noImprovementCount >= maxNoImprovementIterations)
+                        {
+                            recorditeration = i;
+                            break;
+                        }
                     }
 
                     //最佳解
@@ -2988,19 +3018,20 @@ namespace PMCDash.Controllers
                             }
                         }
                     }
-                    result = "Data save successful";
+                    result = $"Data save successful, iteration {recorditeration} time";
                 }
             }
             else
             {
                 throw new Exception("No data available in the interval");
             }
-
+            DateTime endtime = DateTime.Now;
+            TimeSpan Duration = endtime - starttime;
             //CountDelay(Tep);
             //Tep.OrderBy(x => x.OrderID).ThenBy(x => x.OPID);
             return new ActionResponse<string>
             {
-                Data = result
+                Data = result+$" ,{request.SelectOrders.Count()} OP, Spend {Duration.TotalSeconds} seconds"
             };
         }
 
@@ -3713,10 +3744,18 @@ namespace PMCDash.Controllers
                 var train = PMC.Scheduled(sequence);
                 ChromosomeList.Add(i, train.Select(x => (Chromsome)x.Clone()).ToList());
             }
+            int noImprovementCount = 0;
+            int maxNoImprovementIterations = 10;
+            int recorditeration = 0;
             //iteration
             for (int i = 0; i < iteration; i++)
             {
-                PMC.EvaluationFitness(ref ChromosomeList);
+                PMC.EvaluationFitness(ref ChromosomeList, ref noImprovementCount);
+                if(noImprovementCount>= maxNoImprovementIterations)
+                {
+                    recorditeration = i;
+                    break;
+                }
             }
             // find the best solution
             List<Evafitnessvalue> fitness_idx_value = new List<Evafitnessvalue>();
@@ -3844,7 +3883,7 @@ namespace PMCDash.Controllers
                     }
                 }
             }
-            result = "Data save successful";
+            result = $"Data save successful, iteration {recorditeration} times";
 
             return new ActionResponse<string>
             {
@@ -3911,7 +3950,7 @@ namespace PMCDash.Controllers
 
             var result = string.Empty;
 
-            //原始排程(包含加工中、暫停中製程)
+            //原始排程(未開工)
             var originSchedule = new List<Chromsome>();
             var sqlStr = $@"SELECT a.OrderID, a.OPID, a.Range,a.OrderQTY, Optime = HumanOpTime+MachOpTime* a.OrderQTY, a.StartTime, a.EndTime, a.AssignDate, a.WorkGroup, a.MAKTX
                             FROM Assignment a left join WIP as wip
@@ -3951,10 +3990,51 @@ namespace PMCDash.Controllers
                 }
             }
 
+            //加工或暫停中製程(不可挪動)
+            var InProcessSchedule = new List<Chromsome>();
+            sqlStr = $@"SELECT a.OrderID, a.OPID, a.Range,a.OrderQTY, Optime = HumanOpTime+MachOpTime* a.OrderQTY, a.StartTime, a.EndTime, a.AssignDate, a.WorkGroup, a.MAKTX
+                            FROM Assignment a left join WIP as wip
+                            on a.OrderID=wip.OrderID and a.OPID=wip.OPID
+                            left join WipRegisterLog w
+                            on w.WorkOrderID = a.OrderID and w.OPID=a.OPID
+                            where w.WorkOrderID is not NULL and wip.WIPEvent in (1,2) and Scheduled = 1 and a.StartTime is not null
+                            order by a.WorkGroup, a.StartTime";
+            using (var conn = new SqlConnection(_ConnectStr.Local))
+            {
+                if (conn.State != ConnectionState.Open)
+                    conn.Open();
+                using (var comm = new SqlCommand(sqlStr, conn))
+                {
+                    using (var sqlData = comm.ExecuteReader())
+                    {
+                        if (sqlData.HasRows)
+                        {
+                            while (sqlData.Read())
+                            {
+                                InProcessSchedule.Add(new Chromsome
+                                {
+                                    OrderID = sqlData["OrderID"].ToString().Trim(),
+                                    OPID = Convert.ToInt32(sqlData["OPID"]),
+                                    Range = Convert.ToInt32(sqlData["Range"]),
+                                    WorkGroup = sqlData["WorkGroup"].ToString(),
+                                    StartTime = Convert.ToDateTime(sqlData["StartTime"].ToString()),
+                                    EndTime = Convert.ToDateTime(sqlData["EndTime"].ToString()),
+                                    Duration = new TimeSpan(0, (int)Convert.ToDouble(sqlData["Optime"].ToString()), 0),
+                                    AssignDate = Convert.ToDateTime(sqlData["AssignDate"].ToString()),
+                                    Maktx = sqlData["MAKTX"].ToString().Trim()
+                                });
+
+                            }
+                        }
+                    }
+                }
+            }
+
 
             var PMC = new DelayMthod(chromosomesCount, devices);
-            var requestOrderSets = PMC.DispatchCreateDataSet(Orderlist, activatetime);//只有未開工之製程(可以重新排程的)
-            var totalcount = requestOrderSets.Count();//所有重新排程的製程數量
+            //撈出可以重新排程的製程(未排程、未開工)
+            var requestOrderSets = PMC.DispatchCreateDataSet(Orderlist, activatetime);
+            var totalcount = originSchedule.Count();//所有重新排程的製程數量
             //重新設定插單的加工時間與機台
             foreach (var item in Orderlist)
             {
@@ -3967,9 +4047,10 @@ namespace PMCDash.Controllers
                     requestOrderSets[index].WorkGroup = String.Empty;
                 }
             }
-            var originsche = requestOrderSets.Where(x => !request.Exists(y => y.OrderID == x.OrderID)).ToList();//原排程放入(未包含插單)
+            //可重新排程(未包含插單工單)
+            var originsche = requestOrderSets.Where(x => !request.Exists(y => y.OrderID == x.OrderID)).ToList();
             originsche = originsche.OrderBy(x => x.WorkGroup).ThenBy(x => x.StartTime).ToList();
-            //原排程各機台順序
+            //原排程各機台順序(未包含插單工單)
             var originseq = new List<LocalMachineSeq>();//原排程排序(未包含插單)
             int machineSeq = 0;
             foreach (var item in originsche)
@@ -4033,9 +4114,11 @@ namespace PMCDash.Controllers
                 //取得當前機台&當前工單最後時間
                 var reportedMachine = new Dictionary<string, DateTime>();
                 var reportedOrder = new Dictionary<string, DateTime>();
-                foreach (var item in originSchedule.Distinct(x => x.WorkGroup).Select(x => x.WorkGroup))
+                //取得當前機台最後時間
+                foreach (var item in InProcessSchedule.Distinct(x => x.WorkGroup).Select(x => x.WorkGroup))
                 {
-                    var endTimes = originSchedule.Where(x => x.WorkGroup == item && (!requestOrderSets.Exists(y => y.OrderID == x.OrderID && y.OPID == x.OPID)))
+                    //取出已開工製程
+                    var endTimes = InProcessSchedule.Where(x => x.WorkGroup == item && (!requestOrderSets.Exists(y => y.OrderID == x.OrderID && y.OPID == x.OPID)))
                                                  .ToList();
                     if (endTimes.Count != 0)
                     {
@@ -4060,9 +4143,9 @@ namespace PMCDash.Controllers
                     }
                 }
                 //取得當前工單最後時間
-                foreach (var item in originSchedule.Distinct(x => x.OrderID).Select(x => x.OrderID))
+                foreach (var item in InProcessSchedule.Distinct(x => x.OrderID).Select(x => x.OrderID))
                 {
-                    var endTimes = originSchedule.Where(x => x.OrderID == item && (!requestOrderSets.Exists(y => y.OrderID == x.OrderID && y.OPID == x.OPID)))
+                    var endTimes = InProcessSchedule.Where(x => x.OrderID == item && (!requestOrderSets.Exists(y => y.OrderID == x.OrderID && y.OPID == x.OPID)))
                                                  .ToList();
                     if (endTimes.Count != 0)
                     {
@@ -4104,14 +4187,12 @@ namespace PMCDash.Controllers
                 {
                     foreach (var process in requestOrderSets.Where(x => x.OrderID == order.OrderID).OrderBy(x => x.Range))
                     {
-                        var tempschedule = PMC.Scheduled(originseq);
+                        
+                        var tempschedule = PMC.Scheduled(originseq);//未包含插單製程重新排程
                         var MakeSpan = tempschedule.Select(x => x.EndTime).Max();//當前排程makespan
                         CanUseDevices = PMC.getCanUseDevice(process.OrderID, process.OPID.ToString(), process.Maktx);//可用機台
                         CanUseDevices = CanUseDevices.Distinct(x => x.Remark).ToList();
-                        //if (CanUseDevices.Count == 0)
-                        //{
-                        //    CanUseDevices = devices;
-                        //}    
+
                         if (CanUseDevices.Count > 0)
                         {
                             double[] Fitness = new double[CanUseDevices.Count()];//各機台合適度
@@ -4157,7 +4238,7 @@ namespace PMCDash.Controllers
                                 #region 用各機台區間算剩餘時間
                                 //剩餘時間計算
                                 var intervalendtime = begin.AddMinutes(process.Duration.TotalMinutes);//區間結束時間
-                                                                                                      //區間扣除在內製程(開工&完工)的時間
+                                //區間扣除在內製程(開工&完工)的時間
                                 var remaintime = (intervalendtime - begin).TotalMinutes - tempschedule.Where(x => x.WorkGroup == CanUseDevices[i].Remark && x.StartTime >= begin && x.EndTime <= intervalendtime).Sum(x => x.Duration.TotalMinutes);
                                 //扣除開工時間在區間外，完工時間在區間內製程時間
                                 var firstprocess = tempschedule.Where(x => x.WorkGroup == CanUseDevices[i].Remark && x.EndTime > begin && x.StartTime < begin).OrderBy(x => x.EndTime).ToList();
@@ -4311,8 +4392,8 @@ namespace PMCDash.Controllers
                 //    T = T * Rt;
                 //}
 
-                //未更動的製程加入finalschedule
-                var nochange = originSchedule.FindAll(x => !finalschedule.Exists(y => y.OrderID == x.OrderID && y.OPID == x.OPID));
+                //未更動的製程(已開工、暫停中)加入finalschedule
+                var nochange = InProcessSchedule.FindAll(x => !finalschedule.Exists(y => y.OrderID == x.OrderID && y.OPID == x.OPID));
                 foreach (var item in nochange)
                 {
                     finalschedule.Add(item);
@@ -4385,7 +4466,7 @@ namespace PMCDash.Controllers
                 {
                     foreach (var item in TempJob)
                     {
-                        if (originseq.Exists(x => x.OrderID == item.OrderID && x.OPID == item.OPID))
+                        if (requestOrderSets.Exists(x => x.OrderID == item.OrderID && x.OPID == item.OPID))
                         {
                             //同機台前面製程
                             var samewg = TempJob.FindAll(x => x.WorkGroup == item.WorkGroup && Convert.ToDateTime(x.StartTime) < Convert.ToDateTime(item.StartTime)).OrderByDescending(x => x.StartTime).ToList();
@@ -4475,15 +4556,26 @@ namespace PMCDash.Controllers
                     }
                     else
                     {
-                        //其餘製程icon設為【受影響】
-                        var idx = originSchedule.FindIndex(x => x.OrderID == item.OrderID && x.OPID == item.OPID);
-                        if (originSchedule[idx].StartTime != item.StartTime || originSchedule[idx].WorkGroup != item.WorkGroup)
+                        //非加工中、暫停中製程
+                        if(originSchedule.Exists(x => x.OrderID == item.OrderID && x.OPID == item.OPID))
                         {
-                            SqlStr = $@" update AssignmentTemp4
+                            var idx = originSchedule.FindIndex(x => x.OrderID == item.OrderID && x.OPID == item.OPID);
+                            //時間有調整製程icon設為【受影響】
+                            if (originSchedule[idx].StartTime != item.StartTime || originSchedule[idx].WorkGroup != item.WorkGroup)
+                            {
+                                SqlStr = $@" update AssignmentTemp4
                                  set StartTime = @StartTime, EndTime = @EndTime, WorkGroup = @WorkGroup, Scheduled = 2
                                  where OrderID = @OrderID and OPID =  @OPID";
-                            changecount += 1;
+                                changecount += 1;
+                            }
+                            else
+                            {
+                                SqlStr = $@" update AssignmentTemp4
+                                 set StartTime = @StartTime, EndTime = @EndTime, WorkGroup = @WorkGroup, Scheduled = 1
+                                 where OrderID = @OrderID and OPID =  @OPID";
+                            }
                         }
+                        //加工中、暫停中製程
                         else
                         {
                             SqlStr = $@" update AssignmentTemp4
@@ -4531,8 +4623,8 @@ namespace PMCDash.Controllers
 
 
             string SqlStr = $@"SELECT p.CanSync, OrderQTY, HumanOpTime, MachOpTime, AssignDate, AssignDate_PM, MAKTX, Range
-                              FROM Assignment
-                              inner join Process as p
+                              FROM {_ConnectStr.APSDB}.dbo.Assignment
+                              inner join {_ConnectStr.MRPDB}.dbo.Process as p
                               on OPID = p.ID
                               WHERE OrderID = @OrderID and OPID = @OPID";
             List<OrderInfo> MachineSeq = new List<OrderInfo>();//存同機台的所有製程
@@ -5415,13 +5507,18 @@ namespace PMCDash.Controllers
             var originSchedule = new List<ScheduleDto>();
             var changeOrders = new EditOrderModels();
 
-            //request.OPID = request.OPID.Substring(0,request.OPID.IndexOf("_"));
-
-            string SqlStr = @"SELECT *, p.CanSync
-                              FROM  Assignment
-                              INNER JOIN Process as p on OPID = p.ID
-                              where (Scheduled = 1 or (OrderID = @orderID and OPID = @OPID))
-                              ORDER BY OrderID, OPID";
+            string SqlStr = $@"SELECT *, p.CanSync
+                              FROM  {_ConnectStr.APSDB}.dbo.Assignment as a
+                              left join {_ConnectStr.APSDB}.dbo.WIP as wip
+                              on a.OrderID=wip.OrderID and a.OPID=wip.OPID
+                              INNER JOIN {_ConnectStr.MRPDB}.dbo.Process as p on a.OPID = p.ID
+                              where (wip.WIPEvent!=3 or wip.WIPEvent is NULL) and (Scheduled = 1 and a.StartTime is not null) or (a.OrderID = @orderID and a.OPID = @OPID)
+                              ORDER BY a.OrderID, a.OPID";
+            //string SqlStr = $@"SELECT *, p.CanSync
+            //                  FROM  {_ConnectStr.APSDB}.dbo.Assignment
+            //                  INNER JOIN {_ConnectStr.MRPDB}.dbo.Process as p on OPID = p.ID
+            //                  where (Scheduled = 1 or (OrderID = @orderID and OPID = @OPID))
+            //                  ORDER BY OrderID, OPID";
             using (var Conn = new SqlConnection(_ConnectStr.Local))
             {
                 if (Conn.State != ConnectionState.Open)
@@ -5487,7 +5584,7 @@ namespace PMCDash.Controllers
 
             clearntemp("truncate table AssignmentTemp5");
             var sqlStr = $@"                          
-                            INSERT INTO AssignmentTemp5 ([SeriesID],[OrderID],[OPID],[OPLTXA1],[MachOpTime],[HumanOpTime]
+                            INSERT INTO {_ConnectStr.APSDB}.dbo.AssignmentTemp5 ([SeriesID],[OrderID],[OPID],[OPLTXA1],[MachOpTime],[HumanOpTime]
                                   ,[StartTime],[EndTime],[WorkGroup],[Operator],[AssignDate]
                                   ,[Parent],[SAP_WorkGroup],[OrderQTY],[Scheduled],[AssignDate_PM],[ShipAdvice]
                                   ,[IsSkip],[MAKTX],[PRIORITY],[Note],[Important])
@@ -5495,7 +5592,7 @@ namespace PMCDash.Controllers
                                   ,[StartTime],[EndTime],[WorkGroup],[Operator],[AssignDate]
                                   ,[Parent],[SAP_WorkGroup],[OrderQTY],[Scheduled],[AssignDate_PM],[ShipAdvice]
                                   ,[IsSkip],[MAKTX],[PRIORITY],[Note],[Important]
-                            FROM Assignment
+                            FROM {_ConnectStr.APSDB}.dbo.Assignment
                             ";
             using (var Conn = new SqlConnection(_ConnectStr.Local))
             {
@@ -5507,7 +5604,7 @@ namespace PMCDash.Controllers
                 }
             }
 
-            SqlStr = @"SELECT * FROM  Assignment where Scheduled=1 ORDER BY OrderID, OPID ";
+            SqlStr = $@"SELECT * FROM  {_ConnectStr.APSDB}.dbo.Assignment where Scheduled=1 ORDER BY OrderID, OPID ";
             using (var Conn = new SqlConnection(_ConnectStr.Local))
             {
                 if (Conn.State != ConnectionState.Open)
@@ -5551,7 +5648,7 @@ namespace PMCDash.Controllers
                 x.StartTime == item.StartTime &&
                 x.EndTime == item.EndTime))
                 {
-                    sqlStr = @" UPDATE AssignmentTemp5 SET 
+                    sqlStr = $@" UPDATE {_ConnectStr.APSDB}.dbo.AssignmentTemp5 SET 
                                 WorkGroup=@WorkGroup,
                                 StartTime=@StartTime,
                                 EndTime=@EndTime,

@@ -638,6 +638,7 @@ namespace PMCDash.Models
         public DateTime Assigndate { get; set; }
         public string Maktx { get; set; }
         public int PartCount { get; set; }
+        public int Scheduled { get; set; }
     }
 
     public class LocalMachineSeq

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using NSwag.Annotations;
 using PMCDash.Models;
 using PMCDash.Models.Part2;
+using PMCDash.Services;
 using static PMCDash.Services.AccountService;
 
 namespace PMCDash.Controllers.Part2
@@ -93,7 +94,7 @@ namespace PMCDash.Controllers.Part2
                             Progress = cast( (cast(wip.QtyGood as float) + cast(wip.QtyBad as float)) / cast(a.OrderQTY as float) * 100 as int)
                             ,pt.Name
                             from {_ConnectStr.APSDB}.dbo.Assignment as a
-                            inner join {_ConnectStr.APSDB}.dbo.WIP as wip ON a.OrderID = wip.OrderID and a.OPID = wip.OPID
+                            inner join {_ConnectStr.APSDB}.dbo.WIP as wip ON a.SeriesID=b.SeriesID
                             LEFT join {_ConnectStr.APSDB}.dbo.QCAssignment as q on a.OrderID = q.WorkOrderID and a.OPID = q.OPID
                             LEFT JOIN {_ConnectStr.MRPDB}.dbo.QCrule as qcr on a.OPID=qcr.id
                             LEFT JOIN {_ConnectStr.APSDB}.dbo.QCPointValue as qcp ON a.OrderID=qcp.WorkOrderID AND qcp.OPID=qcr.id and qcp.QCPoint=qcr.QCPoint
@@ -227,7 +228,7 @@ namespace PMCDash.Controllers.Part2
             var result = new List<QC>();
             var SqlStr = @$"SELECT a.OrderID ,a.OPID,a.MAKTX,c.WIPEvent,b.QCPoint,b.QCPointName,b.QCLSL,b.QCUSL,d.QCPointValue,d.QCToolId,d.QCunit,d.Createtime,d.Lastupdatetime
                             FROM {_ConnectStr.APSDB}.dbo.Assignment as a
-                            LEFT JOIN {_ConnectStr.MRPDB}.dbo.QCrule as b on  a.OPID=b.id
+                            INNER JOIN {_ConnectStr.MRPDB}.dbo.QCrule as b on  a.OPID=b.id
                             LEFT JOIN {_ConnectStr.APSDB}.dbo.QCPointValue as d ON  a.OrderID=d.WorkOrderID AND b.id=d.OPID and b.QCPoint=d.QCPoint
                             LEFT JOIN {_ConnectStr.APSDB}.dbo.WIP as c on a.OrderID=c.OrderID AND a.OPID=c.OPID
                             WHERE a.OrderID= @OrderID AND a.OPID= @OPId";
@@ -257,6 +258,7 @@ namespace PMCDash.Controllers.Part2
                                     QCToolID = checkNoword(SqlData["QCToolId"].ToString().Trim()),
                                     CreateTime = checkNoword(SqlData["CreateTime"].ToString().Trim()),
                                     LastUpdateTime = checkNoword(SqlData["LastUpdateTime"].ToString().Trim()),
+                                    toolDiff = getToolDiff(SqlData["QCToolId"].ToString().Trim()),
                                     Enable = enable
                                 });
 
@@ -296,14 +298,211 @@ namespace PMCDash.Controllers.Part2
             return result;
         }
 
+        private int delayday(string DeadLine_t, string WillDone_t)
+        {
+            string result = "";
+            int res = 0;
+            DateTime dtDate;
+            if (_ConnectStr.Customer == 0)
+            {
+                if (DateTime.TryParse(DeadLine_t, out dtDate))
+                {
+                    DateTime start = Convert.ToDateTime(DeadLine_t);
+
+                    DateTime end = Convert.ToDateTime(WillDone_t);
+
+                    TimeSpan ts = end.Subtract(start); //兩時間天數相減
+
+                    if (ts.Days < 0)
+                    {
+                        result = "0 天";
+                    }
+                    else
+                    {
+                        result = ts.Days.ToString() + " 天"; //相距天數
+                    }
+                }
+                else
+                {
+                    result = "N/A";
+                }
+            }
+            else
+            {
+                if (DateTime.TryParse(DeadLine_t, out dtDate))
+                {
+                    DateTime start = Convert.ToDateTime(DeadLine_t);
+
+                    DateTime end = DateTime.Now;
+
+                    TimeSpan ts = start.Subtract(end); //兩時間天數相減
+
+                    res = ts.Days;
+                }
+                else
+                {
+                    res = 0;
+                }
+            }
+            return res;
+        }
+
+
+        [HttpPost("QCWorkTaskDetail")]
+        public List<OPDetail> QCWorkTaskDetail(string OrderID, string OPId)
+        {
+            string baseUrl = "http://" + Request.Host.Value + "/CADFiles/";
+            UserData userdata = UserInfo();
+            var result = new List<OPDetail>();
+
+            //if (!ValidOrder(OrderID, OPId))
+            //{
+            //    return result;
+            //}
+
+            var SqlStr = "";
+            SqlStr = @$";WITH cte AS
+                        (
+                           SELECT
+                                 ROW_NUMBER() OVER (PARTITION BY OrderID ORDER BY [Range]) AS rn,*
+                           FROM 
+                           (select 
+	                        ord.OrderID as ERPOrderID,a.OrderID,a.OPID,a.[Range],a.OPLTXA1,a.MAKTX,c.[Name],a.StartTime,a.EndTime,a.AssignDate,a.WorkGroup as remark,d.GroupName,a.ImgPath
+	                        ,(select top(1) [user_name] from {_ConnectStr.AccuntDB}.dbo.[User] where [user_id]=a.Operator) as [user_name]
+	                        ,Progress = cast( (cast(b.QtyGood as float) + cast(b.QtyBad as float)) / cast(a.OrderQTY as float) * 100 as int)
+	                        ,RemainingCount = (a.OrderQTY - b.QtyTol)
+	                        ,a.OrderQTY,b.QtyGood,b.QtyBad,b.WIPEvent,b.StartTime as wipStartTime,b.EndTime as wipEndTime
+                            ,(select top(1) [user_name] from {_ConnectStr.AccuntDB}.dbo.[User] where [user_id]=f.QCman) as QCman
+                            ,g.CustomerInfo
+							,d.ID as DeviceID
+                            ,(SELECT COUNT(*) FROM {_ConnectStr.MRPDB}.dbo.QCrule as qcr WHERE qcr.id=a.OPID) AS QC_count
+                            ,(select COUNT(*) FROM {_ConnectStr.APSDB}.dbo.QCPointValue as qcpv where qcpv.WorkOrderID=a.OrderID and qcpv.OPID=a.OPID and qcpv.MAKTX=a.MAKTX) AS QCv_count
+	                        from {_ConnectStr.APSDB}.[dbo].Assignment as a
+	                        inner join {_ConnectStr.APSDB}.[dbo].WIP as b on a.SeriesID=b.SeriesID
+                            left join {_ConnectStr.APSDB}.[dbo].[OrderOverview] as ord on a.ERPOrderID=ord.OrderID
+	                        left join {_ConnectStr.MRPDB}.dbo.Part as c on a.MAKTX=c.Number
+	                        left join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
+                            left join {_ConnectStr.APSDB}.[dbo].QCAssignment as f on a.OrderID=f.WorkOrderID and a.OPID=f.OPID
+                            left join {_ConnectStr.APSDB}.[dbo].OrderOverview as g on a.ERPOrderID=g.OrderID
+	                        where b.WIPEvent!=3) as a
+                        )
+                        SELECT *
+                        FROM cte as aa
+						left join {_ConnectStr.AccuntDB}.dbo.GroupDevice as bb on aa.DeviceID=bb.DeviceId
+						where OrderID=@OrderID and OPID=@OPId and  bb.GroupSeq=2
+                        order by OrderID,Range";
+
+            using (var conn = new SqlConnection(_ConnectStr.Local))
+            {
+                using (var comm = new SqlCommand(SqlStr, conn))
+                {
+                    if (conn.State != ConnectionState.Open)
+                        conn.Open();
+                    comm.Parameters.Add(("@OrderID"), SqlDbType.NVarChar).Value = OrderID;
+                    comm.Parameters.Add(("@OPId"), SqlDbType.NVarChar).Value = OPId;
+                    using (SqlDataReader SqlData = comm.ExecuteReader())
+                    {
+                        if (SqlData.HasRows)
+                        {
+                            while (SqlData.Read())
+                            {
+                                string imgPath = "N/A";
+                                if (_ConnectStr.Debug == 1)
+                                    imgPath = "https://i.imgur.com/pOxVHtB.jpg";
+                                else
+                                    imgPath = baseUrl + (string.IsNullOrEmpty(SqlData["ImgPath"].ToString().Trim()) ? "N/A" : SqlData["ImgPath"].ToString());
+
+                                string delaydaydisplay = "";
+                                int dd = delayday(SqlData["AssignDate"].ToString().Trim(), SqlData["EndTime"].ToString());
+                                if (dd < 0)
+                                    delaydaydisplay = "延遲 " + Math.Abs(dd) + " 天";
+                                else
+                                    delaydaydisplay = "還有 " + Math.Abs(dd) + " 天";
+
+                                result.Add(new OPDetail
+                                {
+                                    ERPorderID = string.IsNullOrEmpty(SqlData["ERPOrderID"].ToString().Trim()) ? "N/A" : SqlData["ERPOrderID"].ToString().Trim(),
+                                    OrderId = string.IsNullOrEmpty(SqlData["OrderID"].ToString().Trim()) ? "N/A" : SqlData["OrderID"].ToString(),
+                                    OPId = string.IsNullOrEmpty(SqlData["OPID"].ToString().Trim()) ? "N/A" : SqlData["OPID"].ToString(),
+                                    OPName = string.IsNullOrEmpty(SqlData["OPLTXA1"].ToString().Trim()) ? "N/A" : SqlData["OPLTXA1"].ToString(),
+                                    AssignDate = string.IsNullOrEmpty(SqlData["AssignDate"].ToString()) ? "N/A" : Convert.ToDateTime(SqlData["AssignDate"]).ToString(_dateFormat),
+                                    Deviec = string.IsNullOrEmpty(SqlData["remark"].ToString().Trim()) ? "N/A" : SqlData["remark"].ToString(),
+                                    //暫時替換wipEndTime
+                                    StartTime = string.IsNullOrEmpty(SqlData["StartTime"].ToString()) ? "N/A" : Convert.ToDateTime(SqlData["StartTime"]).ToString(_timeFormat),//checkNoword(SqlData["StartTime"].ToString().Trim()),
+                                    EndTime = string.IsNullOrEmpty(SqlData["EndTime"].ToString()) ? "N/A" : Convert.ToDateTime(SqlData["EndTime"]).ToString(_timeFormat),//checkNoword(SqlData["EndTime"].ToString().Trim()),
+                                    OperatorName = string.IsNullOrEmpty(SqlData["user_name"].ToString().Trim()) ? "N/A" : SqlData["user_name"].ToString(),
+                                    ProductId = string.IsNullOrEmpty(SqlData["MAKTX"].ToString().Trim()) ? "N/A" : SqlData["MAKTX"].ToString(),
+                                    ProductName = "【" + (string.IsNullOrEmpty(SqlData["CustomerInfo"].ToString().Trim()) ? "NA/NA/NA" : SqlData["CustomerInfo"].ToString().Trim()).Split("/")[1] + "】" + (string.IsNullOrEmpty(SqlData["Name"].ToString().Trim()) ? "N/A" : SqlData["Name"].ToString()),
+                                    RequireNum = string.IsNullOrEmpty(SqlData["OrderQTY"].ToString().Trim()) ? "N/A" : SqlData["OrderQTY"].ToString(),
+                                    ImgPath = imgPath,
+
+                                    OPStatus = string.IsNullOrEmpty(SqlData["WIPEvent"].ToString().Trim()) ? "N/A" : SqlData["WIPEvent"].ToString(),
+                                    wipStartTime = string.IsNullOrEmpty(SqlData["wipStartTime"].ToString()) ? "N/A" : Convert.ToDateTime(SqlData["wipStartTime"]).ToString(_timeFormat),
+                                    wipEndTime = string.IsNullOrEmpty(SqlData["wipEndTime"].ToString()) ? "N/A" : Convert.ToDateTime(SqlData["wipEndTime"]).ToString(_timeFormat),
+                                    Progress = ChangeProgressIntFormat(SqlData["Progress"].ToString().Trim()),
+                                    CompleteNum = string.IsNullOrEmpty(SqlData["QtyGood"].ToString().Trim()) ? "N/A" : SqlData["QtyGood"].ToString(),
+                                    DefectiveNum = string.IsNullOrEmpty(SqlData["QtyBad"].ToString().Trim()) ? "N/A" : SqlData["QtyBad"].ToString(),
+                                    QtyBad = string.IsNullOrEmpty(SqlData["QtyBad"].ToString().Trim()) ? "N/A" : SqlData["QtyBad"].ToString(),
+
+                                    DeleyDays = delaydaydisplay,
+                                    DeviceGroup = string.IsNullOrEmpty(SqlData["GroupName"].ToString().Trim()) ? "N/A" : SqlData["GroupName"].ToString(),
+                                    //IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
+                                    IsQC = QCStatus(IsQCDone(SqlData["OrderID"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
+                                    //QCman = string.IsNullOrEmpty(SqlData["QCman"].ToString().Trim()) ? "N/A" : SqlData["QCman"].ToString(),
+                                    QCman = userdata.User_Id.ToString(),
+                                });
+
+                                //若需檢驗，判斷檢驗項目
+                                if (result[0].IsQC == "False")
+                                {
+                                    //判斷是否有檢驗點要顯示
+                                    var QC = QCList(OrderID, OPId);
+                                    if (QC.Count == 1)
+                                    {
+                                        if (!QC.Exists(x => x.QCPointName == "N/A"))
+                                        {
+                                            result[0].QCList = QC;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        result[0].QCList = QC;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            foreach (var item in result)
+            {
+                //判斷機台是否有委外廠商名稱，若有則顯示委外廠商名稱
+                bool hasBrackets = item.Deviec.Contains("(") && item.Deviec.Contains(")");
+                if (hasBrackets)
+                {
+                    int start = item.Deviec.IndexOf("(");
+                    int end = item.Deviec.IndexOf(")");
+                    if (start >= 0 && end > start)
+                    {
+                        string factory = item.Deviec.Substring(start + 1, end - start - 1);
+                        item.ProductName += $"({factory})";
+                    }
+
+                }
+            }
+            return result;
+
+        }
+
         /// <summary>
         /// 取得檢驗工作任務清單詳細資訊
         /// </summary>
         /// <param name="OrderID">EX: 1219111091</param>
         /// <param name="OPId">EX: 40</param>
         /// <returns></returns>
-        [HttpPost("QCWorkTaskDetail")]
-        public List<OPDetail> QCWorkTaskDetail(string OrderID, string OPId)
+        [HttpPost("QCWorkTaskDetail_V1")]
+        public List<OPDetail> QCWorkTaskDetail_V1(string OrderID, string OPId)
         {
             var result = new List<OPDetail>();
             string baseUrl = "http://" + Request.Host.Value + "/CADFiles/";
@@ -413,6 +612,49 @@ namespace PMCDash.Controllers.Part2
                 else
                 {
                     result = "GO";
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// 取得量具誤差值
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        private List<string> getToolDiff(string id)
+        {
+            List<string> result = new List<string>();
+            if (_ConnectStr.Debug == 1)
+            {
+                //隨機給值
+                string[] mockdata1 = { "位置1 : ", "位置2 : " };
+                string[] mockdata2 = { "+0.001", "-0.001", "+0.003", "-0.003", "+0.999,", "-9.999", "+0.000", };
+                Random r = new Random();
+
+                if (id != "" || id != null)
+                {
+                    result.Add(mockdata1[0] + mockdata2[r.Next(0, mockdata2.Length)]);
+                    result.Add(mockdata1[1] + mockdata2[r.Next(0, mockdata2.Length)]);
+                }
+                else
+                {
+                    result.Add(mockdata1[0] + "-");
+                    result.Add(mockdata1[1] + "-");
+                }
+            }
+            else
+            {
+                //從資料庫取得，資料庫還沒準備
+                MessureService messureService = new MessureService();
+                messureService.connectString = _ConnectStr.Local;
+                string sqlcmd = @$"SELECT * FROM {_ConnectStr.MeasureDB}.[dbo].[Tolerance] where ToolID='{id}'";
+                var ans = messureService.getToolTolerance(sqlcmd);
+                int i = 0;
+                foreach (var item in ans)
+                {
+                    result.Add("位置" + item.position + ": " + item.value);
+                    i++;
                 }
             }
             return result;

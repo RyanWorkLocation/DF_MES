@@ -647,32 +647,36 @@ namespace PMCDash.Controllers
             double totalWaitTime = 0;
             if (list.Count != 0)
             {
-                for (int i = 1; i < list.Count; i++)
+                if(list.Count>=2)
                 {
-                    if (list[i].StartTime != null && list[i].EndTime != null)
+                    for (int i = 1; i < list.Count; i++)
                     {
-                        totalTime += list[i].EndTime.Value.Subtract(list[i].StartTime.Value).TotalMinutes;
-                        if (list[i].EndTime!=null)
+                        if (list[i].StartTime != null && list[i].EndTime != null && list[i - 1].StartTime != null && list[i - 1].EndTime != null)
                         {
-                            totalWaitTime += list[i].StartTime.Value.Subtract(list[i - 1].EndTime.Value).TotalMinutes;
+                            totalTime += list[i].EndTime.Value.Subtract(list[i].StartTime.Value).TotalMinutes;
+                            if (list[i].EndTime != null)
+                            {
+                                totalWaitTime += list[i].StartTime.Value.Subtract(list[i - 1].EndTime.Value).TotalMinutes;
+                            }
                         }
+                        else
+                        {
+                            totalTime += Convert.ToDouble(list[i].ProcessTime);
+                        }
+
                     }
-                    else
-                    {
-                        totalTime += Convert.ToDouble(list[i].ProcessTime);
-                    }
-                    
-                }
-                if (list[0].StartTime != null && list[0].EndTime != null)
-                {
-                    totalTime += list[0].EndTime.Value.Subtract(list[0].StartTime.Value).TotalMinutes;
                 }
                 else
                 {
-                    totalTime += Convert.ToDouble(list[0].ProcessTime);
+                    if (list[0].StartTime != null && list[0].EndTime != null)
+                    {
+                        totalTime += list[0].EndTime.Value.Subtract(list[0].StartTime.Value).TotalMinutes;
+                    }
+                    else
+                    {
+                        totalTime += Convert.ToDouble(list[0].ProcessTime);
+                    }
                 }
-                    
-
                 TimeSpan ts = new TimeSpan(0, (int)(totalTime + totalWaitTime), 0);
 
                 double day = ts.TotalDays;

@@ -29,7 +29,7 @@ namespace PMCDash.Services
         public List<GaSchedule> CreateDataSet(string st, string et)
         {
             TimeSpan actDuration = new TimeSpan();
-            string sqlStr = @$"SELECT a.SeriesID, a.OrderID, a.OPID,p.CanSync, a.Range, a.OrderQTY, a.HumanOpTime, a.MachOpTime, a.AssignDate, a.AssignDate_PM,a.MAKTX,wip.WIPEvent
+            string sqlStr = @$"SELECT a.SeriesID, a.OrderID, a.OPID,p.CanSync, a.Range, a.OrderQTY, a.HumanOpTime, a.MachOpTime, a.AssignDate, a.AssignDate_PM,a.MAKTX,wip.WIPEvent,a.Scheduled
                                  FROM {_ConnectStr.APSDB}.dbo.Assignment a left join {_ConnectStr.APSDB}.dbo.WIP as wip on a.SeriesID=wip.SeriesID
                                  Left Join {_ConnectStr.APSDB}.dbo.WipRegisterLog w on w.WorkOrderID = a.OrderID and w.OPID=a.OPID
                                  inner join {_ConnectStr.MRPDB}.dbo.Process as p on a.OPID=p.ID
@@ -76,6 +76,7 @@ namespace PMCDash.Services
                                     PartCount = int.Parse(SqlData["OrderQTY"].ToString()),
                                     Maktx = string.IsNullOrEmpty(SqlData["MAKTX"].ToString()) ? "N/A" : SqlData["MAKTX"].ToString(),
                                     Assigndate = Convert.ToDateTime(SqlData["AssignDate_PM"]),
+                                    Scheduled = int.Parse(SqlData["Scheduled"].ToString()) //05.24 Ryan新增
                                 });
                             }
                         }
@@ -94,7 +95,7 @@ namespace PMCDash.Services
             var rnd = new Random(Guid.NewGuid().GetHashCode());
             var randomized = data.OrderBy(item => rnd.Next());//打亂製程排序，避免依照工單順序排
 
-            //取得各機台是否為委外機台
+            //取得各機台資訊
             var OutsourcingList = getOutsourcings();
 
             //取得所有製程的替代機台
@@ -580,7 +581,7 @@ namespace PMCDash.Services
             return PostST.AddDays(wholeDays + weekends * 2).Add(remainder);
         }
 
-        public void EvaluationFitness(ref Dictionary<int, List<Chromsome>> ChromosomeList)
+        public void EvaluationFitness(ref Dictionary<int, List<Chromsome>> ChromosomeList, ref int noImprovementCount)
         {
             var fitness_idx_value = new List<Evafitnessvalue>();
             var opt_ChromosomeList = new Dictionary<int, List<Chromsome>>();
@@ -596,10 +597,7 @@ namespace PMCDash.Services
             int chromosomeCount = Chromvalue / 2;
             for (int i = 0; i < chromosomeCount; i++)
             {
-                //opt_ChromosomeList.Add(
-                //    i,
-                //    ChromosomeList[fitness_idx_value[i].Idx].Select(x => x.Clone() as Chromsome).ToList()
-                //    );
+
                 opt_ChromosomeList.Add(i, ChromosomeList[fitness_idx_value[i].Idx].OrderBy(x => x.WorkGroup).ThenBy(x => x.StartTime).Select(x => x.Clone() as Chromsome)
                                                                                   .ToList());
             }
@@ -647,7 +645,7 @@ namespace PMCDash.Services
                     crossoverResultList.Add(2 * childItem + 1, crossoverTemp[0]);
                 }
             }
-            InspectJobOper(crossoverResultList, ref ChromosomeList, fitness_idx_value.GetRange(0, crossoverList.Count));
+            InspectJobOper(crossoverResultList, ref ChromosomeList, fitness_idx_value.GetRange(0, crossoverList.Count), ref noImprovementCount);
         }
 
         public void Mutation(List<Chromsome> scheduledData)
@@ -927,8 +925,9 @@ namespace PMCDash.Services
             }
         }
 
-        public void InspectJobOper(Dictionary<int, List<Chromsome>> crossoverResultList, ref Dictionary<int, List<Chromsome>> ChromosomeList, List<Evafitnessvalue> fitness_idx_value)
+        public void InspectJobOper(Dictionary<int, List<Chromsome>> crossoverResultList, ref Dictionary<int, List<Chromsome>> ChromosomeList, List<Evafitnessvalue> fitness_idx_value,ref int noImprovementCount)
         {
+            bool HasImproved = false;
             for (int i = 0; i < crossoverResultList.Count; i++)
             {
                 int total = ChromosomeList[i].Count;//正確工單製程數
@@ -960,6 +959,8 @@ namespace PMCDash.Services
                 }
                 //重新給定機台排序
                 List<LocalMachineSeq> MachineSeq = new List<LocalMachineSeq>();
+                //取得各機台是否為委外機台
+                var OutsourcingList = getOutsourcings();
                 for (int machinenameseq = 0; machinenameseq < Devices.Count; machinenameseq++)
                 {
                     int seq = 0;
@@ -967,36 +968,41 @@ namespace PMCDash.Services
                     var ordersOnMachine = distinct_1.Where(x => x.Item3 == Devices[machinenameseq].Remark).OrderBy(x => x.Item2);
                     foreach (var item in ordersOnMachine)
                     {
-                        if (Devices[machinenameseq].Remark == "G01-1" && Devices[machinenameseq].Remark == "D02-1" && Devices[machinenameseq].Remark == "委外")
+                        if(OutsourcingList.Exists(x=>x.remark== Devices[machinenameseq].Remark))
                         {
-                            MachineSeq.Add(new LocalMachineSeq
+                            if (OutsourcingList.Where(x => x.remark == Devices[machinenameseq].Remark).First().isOutsource == "1")
                             {
-                                OrderID = item.Item1,
-                                OPID = item.Item2,
-                                WorkGroup = item.Item3,
-                                Duration = item.Item4,
-                                PredictTime = item.Item5,
-                                PartCount = item.Item6,
-                                Range = item.Item6,
-                                EachMachineSeq = 0,
-                            });
-                        }
-                        else
-                        {
-                            MachineSeq.Add(new LocalMachineSeq
+                                MachineSeq.Add(new LocalMachineSeq
+                                {
+                                    OrderID = item.Item1,
+                                    OPID = item.Item2,
+                                    WorkGroup = item.Item3,
+                                    Duration = item.Item4,
+                                    PredictTime = item.Item5,
+                                    PartCount = item.Item6,
+                                    Range = item.Item6,
+                                    EachMachineSeq = 0,
+                                });
+                            }
+                            else
                             {
-                                SeriesID = item.Item7,
-                                OrderID = item.Item1,
-                                OPID = item.Item2,
-                                WorkGroup = item.Item3,
-                                Duration = item.Item4,
-                                PredictTime = item.Item5,
-                                PartCount = item.Item6,
-                                Range = item.Item6,
-                                EachMachineSeq = seq,
-                            });
-                            seq++;
+                                MachineSeq.Add(new LocalMachineSeq
+                                {
+                                    SeriesID = item.Item7,
+                                    OrderID = item.Item1,
+                                    OPID = item.Item2,
+                                    WorkGroup = item.Item3,
+                                    Duration = item.Item4,
+                                    PredictTime = item.Item5,
+                                    PartCount = item.Item6,
+                                    Range = item.Item6,
+                                    EachMachineSeq = seq,
+                                });
+                                seq++;
+                            }
                         }
+                        
+                        
                         
                     }
                     if (MachineSeq.Count == distinct_1.Count)
@@ -1022,7 +1028,12 @@ namespace PMCDash.Services
                     ChromosomeList.Add(fitness_idx_value[index].Idx, tempOrder.Select(x => (Chromsome)x.Clone())
                                                                               .ToList());
                     Debug.WriteLine($"delay is {fitness_idx_value[0].Fitness}");
+                    HasImproved = true;
                 }
+            }
+            if(HasImproved==false)
+            {
+                noImprovementCount += 1;
             }
         }
 
@@ -1560,8 +1571,10 @@ namespace PMCDash.Services
             return devices;
         }
 
-        public void EvaluationFitness(ref Dictionary<int, List<Chromsome>> ChromosomeList)
+        public void EvaluationFitness(ref Dictionary<int, List<Chromsome>> ChromosomeList,ref int noImprovementCount)
         {
+            
+
             var fitness_idx_value = new List<Evafitnessvalue>();
             var opt_ChromosomeList = new Dictionary<int, List<Chromsome>>();
 
@@ -1627,7 +1640,7 @@ namespace PMCDash.Services
                     crossoverResultList.Add(2 * childItem + 1, crossoverTemp[0]);
                 }
             }
-            InspectJobOper(crossoverResultList, ref ChromosomeList, fitness_idx_value.GetRange(0, crossoverList.Count));
+            InspectJobOper(crossoverResultList, ref ChromosomeList, fitness_idx_value.GetRange(0, crossoverList.Count), ref noImprovementCount);
         }
 
         public void Mutation(ref List<Chromsome> scheduledData)
@@ -2077,8 +2090,11 @@ namespace PMCDash.Services
             return PostST.AddDays(wholeDays + weekends * 2).Add(remainder);
         }
 
-        public void InspectJobOper(Dictionary<int, List<Chromsome>> crossoverResultList, ref Dictionary<int, List<Chromsome>> ChromosomeList, List<Evafitnessvalue> fitness_idx_value)
+        public void InspectJobOper(Dictionary<int, List<Chromsome>> crossoverResultList, ref Dictionary<int, List<Chromsome>> ChromosomeList, List<Evafitnessvalue> fitness_idx_value, ref int noImprovementCount)
         {
+            bool HasImproved = false;
+            //取得各機台是否為委外機台
+            var OutsourcingList = getOutsourcings();
             for (int i = 0; i < crossoverResultList.Count; i++)
             {
                 int total = ChromosomeList[i].Count;//正確工單製程數
@@ -2117,37 +2133,39 @@ namespace PMCDash.Services
                     var ordersOnMachine = distinct_1.Where(x => x.Item3 == Devices[machinenameseq].Remark).OrderBy(x => x.Item2);
                     foreach (var item in ordersOnMachine)
                     {
-                        if (Devices[machinenameseq].Remark == "G01-1" && Devices[machinenameseq].Remark == "D02-1" && Devices[machinenameseq].Remark == "委外")
+                        if(OutsourcingList.Exists(x=>x.remark== Devices[machinenameseq].Remark))
                         {
-                            MachineSeq.Add(new LocalMachineSeq
+                            if(OutsourcingList.Where(x => x.remark == Devices[machinenameseq].Remark).First().isOutsource == "1")
                             {
-                                OrderID = item.Item1,
-                                OPID = item.Item2,
-                                WorkGroup = item.Item3,
-                                Duration = item.Item4,
-                                PredictTime = item.Item5,
-                                PartCount = item.Item6,
-                                Range = item.Item6,
-                                EachMachineSeq = 0,
-                            });
-                        }
-                        else
-                        {
-                            MachineSeq.Add(new LocalMachineSeq
+                                MachineSeq.Add(new LocalMachineSeq
+                                {
+                                    OrderID = item.Item1,
+                                    OPID = item.Item2,
+                                    WorkGroup = item.Item3,
+                                    Duration = item.Item4,
+                                    PredictTime = item.Item5,
+                                    PartCount = item.Item6,
+                                    Range = item.Item6,
+                                    EachMachineSeq = 0,
+                                });
+                            }
+                            else
                             {
-                                SeriesID = item.Item7,
-                                OrderID = item.Item1,
-                                OPID = item.Item2,
-                                WorkGroup = item.Item3,
-                                Duration = item.Item4,
-                                PredictTime = item.Item5,
-                                PartCount = item.Item6,
-                                Range = item.Item6,
-                                EachMachineSeq = seq,
-                            });
-                            seq++;
+                                MachineSeq.Add(new LocalMachineSeq
+                                {
+                                    SeriesID = item.Item7,
+                                    OrderID = item.Item1,
+                                    OPID = item.Item2,
+                                    WorkGroup = item.Item3,
+                                    Duration = item.Item4,
+                                    PredictTime = item.Item5,
+                                    PartCount = item.Item6,
+                                    Range = item.Item6,
+                                    EachMachineSeq = seq,
+                                });
+                                seq++;
+                            }
                         }
-
                     }
                     if (MachineSeq.Count == distinct_1.Count)
                     {
@@ -2172,7 +2190,13 @@ namespace PMCDash.Services
                     ChromosomeList.Add(fitness_idx_value[index].Idx, tempOrder.Select(x => (Chromsome)x.Clone())
                                                                               .ToList());
                     Debug.WriteLine($"delay is {fitness_idx_value[0].Fitness}");
+                    HasImproved = true;
+
                 }
+            }
+            if(HasImproved==false)
+            {
+                noImprovementCount += 1;
             }
         }
 

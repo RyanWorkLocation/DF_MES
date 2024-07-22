@@ -56,7 +56,7 @@ namespace PMCDash.Services
                                 FROM  {_ConnectStr.APSDB}.dbo.{Assign} as a 
                                 LEFT JOIN  {_ConnectStr.APSDB}.dbo.[WIP] as w
                                 ON w.OrderID=a.OrderID AND w.OPID=a.OPID
-                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) and a.StartTime is not null and a.AssignDate>DATEADD(DAY,-7,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
+                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) and a.StartTime is not null and a.AssignDate>DATEADD(DAY,-60,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
                                 ORDER BY w.WorkGroup ASC, Assign_ST ASC";
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
@@ -126,7 +126,7 @@ namespace PMCDash.Services
                                 FROM  {_ConnectStr.APSDB}.dbo.{Assign} as a 
                                 LEFT JOIN  {_ConnectStr.APSDB}.dbo.[WIP] as w
                                 ON w.OrderID=a.OrderID AND w.OPID=a.OPID
-                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) and a.StartTime is not null and a.AssignDate>DATEADD(DAY,-7,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
+                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) and a.StartTime is not null and a.AssignDate>DATEADD(DAY,-60,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
                                 ORDER BY w.WorkGroup ASC, Assign_ST ASC";
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
@@ -203,7 +203,7 @@ namespace PMCDash.Services
                                 FROM  {_ConnectStr.APSDB}.dbo.{Assign} as a 
                                 LEFT JOIN  {_ConnectStr.APSDB}.dbo.[WIP] as w
                                 ON w.OrderID=a.OrderID AND w.OPID=a.OPID
-                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) and a.StartTime is not null and a.AssignDate>DATEADD(DAY,-7,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
+                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) and a.StartTime is not null and a.AssignDate>DATEADD(DAY,-60,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
                                 ORDER BY w.WorkGroup ASC, Assign_ST ASC";
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
@@ -322,7 +322,7 @@ namespace PMCDash.Services
                                 FROM  {_ConnectStr.APSDB}.dbo.{Assign} as a 
                                 LEFT JOIN  {_ConnectStr.APSDB}.dbo.[WIP] as w
                                 ON w.OrderID=a.OrderID AND w.OPID=a.OPID
-                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) and a.StartTime is not null and a.AssignDate>DATEADD(DAY,-7,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
+                                where (a.Scheduled = 1 or a.Scheduled = 2 or a.Scheduled = 3) and a.StartTime is not null and a.AssignDate>DATEADD(DAY,-60,GETDate()) and a.StartTime>='2024-04-01 00:00:00'
                                 ORDER BY w.WorkGroup ASC, Assign_ST ASC";
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {

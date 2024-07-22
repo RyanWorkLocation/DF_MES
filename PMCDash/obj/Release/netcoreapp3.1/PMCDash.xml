@@ -437,7 +437,7 @@
             </summary>
             <returns>IsQC:N/A(不需檢驗)、False(未檢驗、未檢驗完成)、True(已檢驗完成)</returns>
         </member>
-        <member name="M:PMCDash.Controllers.Part2.QCWorkReportController.QCWorkTaskDetail(System.String,System.String)">
+        <member name="M:PMCDash.Controllers.Part2.QCWorkReportController.QCWorkTaskDetail_V1(System.String,System.String)">
             <summary>
             取得檢驗工作任務清單詳細資訊
             </summary>
@@ -450,6 +450,13 @@
             判斷檢驗結果
             </summary>
             <param name="data"></param>
+            <returns></returns>
+        </member>
+        <member name="M:PMCDash.Controllers.Part2.QCWorkReportController.getToolDiff(System.String)">
+            <summary>
+            取得量具誤差值
+            </summary>
+            <param name="id"></param>
             <returns></returns>
         </member>
         <member name="M:PMCDash.Controllers.Part2.QCWorkReportController.UpdateQCPoint(PMCDash.Models.WorkQCReportRequest)">
