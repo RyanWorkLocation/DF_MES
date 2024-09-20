@@ -837,8 +837,8 @@ namespace PMCDash.Controllers
                                     RequireNum = checkNoword(SqlData["OrderQTY"].ToString().Trim()),
                                     CompleteNum = checkNoword(SqlData["QtyGood"].ToString().Trim()),
                                     DefectiveNum = checkNoword(SqlData["QtyBad"].ToString().Trim()),
-                                    //IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
-                                    IsQC = QCStatus(IsQCDone(SqlData["OrderId"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
+                                    IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
+                                    //IsQC = QCStatus(IsQCDone(SqlData["OrderId"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
                                     QCman = checkNoword(SqlData["QCman"].ToString().Trim()),
                                     //實際開工時間
                                     wipStartTime = string.IsNullOrEmpty(SqlData["wipStartTime"].ToString()) ? "N/A" : Convert.ToDateTime(SqlData["wipStartTime"]).ToString(_timeFormat),
@@ -1038,8 +1038,8 @@ namespace PMCDash.Controllers
                                     RequireNum = string.IsNullOrEmpty(SqlData["OrderQTY"].ToString().Trim()) ? "N/A" : SqlData["OrderQTY"].ToString().Trim(),
                                     CompleteNum = string.IsNullOrEmpty(SqlData["QtyGood"].ToString().Trim()) ? "N/A" : SqlData["QtyGood"].ToString().Trim(),
                                     DefectiveNum = string.IsNullOrEmpty(SqlData["QtyBad"].ToString().Trim()) ? "N/A" : SqlData["QtyBad"].ToString().Trim(),
-                                    //IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
-                                    IsQC = QCStatus(IsQCDone_2(SqlData["QC_count"].ToString(), SqlData["QCv_count"].ToString())),
+                                    IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
+                                    //IsQC = QCStatus(IsQCDone_2(SqlData["QC_count"].ToString(), SqlData["QCv_count"].ToString())),
                                     QCman = string.IsNullOrEmpty(SqlData["QCMan"].ToString()) ? "N/A" : SqlData["QCMan"].ToString()
                                 });
                             }
@@ -1225,7 +1225,8 @@ namespace PMCDash.Controllers
                                     RequireNum = string.IsNullOrEmpty(SqlData["OrderQTY"].ToString().Trim()) ? "N/A" : SqlData["OrderQTY"].ToString().Trim(),
                                     CompleteNum = string.IsNullOrEmpty(SqlData["QtyGood"].ToString().Trim()) ? "N/A" : SqlData["QtyGood"].ToString().Trim(),
                                     DefectiveNum = string.IsNullOrEmpty(SqlData["QtyBad"].ToString().Trim()) ? "N/A" : SqlData["QtyBad"].ToString().Trim(),
-                                    IsQC = QCStatus(IsQCDone_2(SqlData["QC_count"].ToString(), SqlData["QCv_count"].ToString())),//QCStatus(IsQCDone(SqlData["QC_count"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
+                                    IsQC = "N/A",
+                                    //IsQC = QCStatus(IsQCDone_2(SqlData["QC_count"].ToString(), SqlData["QCv_count"].ToString())),
                                     QCman = string.IsNullOrEmpty(SqlData["QCMan"].ToString()) ? "N/A" : SqlData["QCMan"].ToString()
                                 });
                             }

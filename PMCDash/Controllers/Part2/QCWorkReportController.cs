@@ -94,7 +94,7 @@ namespace PMCDash.Controllers.Part2
                             Progress = cast( (cast(wip.QtyGood as float) + cast(wip.QtyBad as float)) / cast(a.OrderQTY as float) * 100 as int)
                             ,pt.Name
                             from {_ConnectStr.APSDB}.dbo.Assignment as a
-                            inner join {_ConnectStr.APSDB}.dbo.WIP as wip ON a.SeriesID=b.SeriesID
+                            inner join {_ConnectStr.APSDB}.dbo.WIP as wip ON a.SeriesID=wip.SeriesID
                             LEFT join {_ConnectStr.APSDB}.dbo.QCAssignment as q on a.OrderID = q.WorkOrderID and a.OPID = q.OPID
                             LEFT JOIN {_ConnectStr.MRPDB}.dbo.QCrule as qcr on a.OPID=qcr.id
                             LEFT JOIN {_ConnectStr.APSDB}.dbo.QCPointValue as qcp ON a.OrderID=qcp.WorkOrderID AND qcp.OPID=qcr.id and qcp.QCPoint=qcr.QCPoint
@@ -153,9 +153,10 @@ namespace PMCDash.Controllers.Part2
                                     RequireNum = checkNoword(SqlData["OrderQTY"].ToString().Trim()),
                                     CompleteNum = checkNoword(SqlData["QtyGood"].ToString().Trim()),
                                     DefectiveNum = checkNoword(SqlData["QtyBad"].ToString().Trim()),
-                                    //IsQC = "False",
+                                    //IsQC = "N/A",
                                     IsQC = QCStatus(IsQCDone(SqlData["OrderId"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
-                                    QCman = checkNoword(SqlData["QCman"].ToString().Trim())
+                                    //QCman = checkNoword(SqlData["QCman"].ToString().Trim())
+                                    QCman = "NULL"
                                 });
                             }
                         }
