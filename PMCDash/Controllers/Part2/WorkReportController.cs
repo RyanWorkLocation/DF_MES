@@ -837,8 +837,8 @@ namespace PMCDash.Controllers
                                     RequireNum = checkNoword(SqlData["OrderQTY"].ToString().Trim()),
                                     CompleteNum = checkNoword(SqlData["QtyGood"].ToString().Trim()),
                                     DefectiveNum = checkNoword(SqlData["QtyBad"].ToString().Trim()),
-                                    IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
-                                    //IsQC = QCStatus(IsQCDone(SqlData["OrderId"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
+                                    //IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
+                                    IsQC = QCStatus(IsQCDone(SqlData["OrderId"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
                                     QCman = checkNoword(SqlData["QCman"].ToString().Trim()),
                                     //實際開工時間
                                     wipStartTime = string.IsNullOrEmpty(SqlData["wipStartTime"].ToString()) ? "N/A" : Convert.ToDateTime(SqlData["wipStartTime"]).ToString(_timeFormat),
@@ -1038,8 +1038,8 @@ namespace PMCDash.Controllers
                                     RequireNum = string.IsNullOrEmpty(SqlData["OrderQTY"].ToString().Trim()) ? "N/A" : SqlData["OrderQTY"].ToString().Trim(),
                                     CompleteNum = string.IsNullOrEmpty(SqlData["QtyGood"].ToString().Trim()) ? "N/A" : SqlData["QtyGood"].ToString().Trim(),
                                     DefectiveNum = string.IsNullOrEmpty(SqlData["QtyBad"].ToString().Trim()) ? "N/A" : SqlData["QtyBad"].ToString().Trim(),
-                                    IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
-                                    //IsQC = QCStatus(IsQCDone_2(SqlData["QC_count"].ToString(), SqlData["QCv_count"].ToString())),
+                                    //IsQC = "N/A",//2023.06.17 Ryan修改 皆無須檢驗
+                                    IsQC = QCStatus(IsQCDone(SqlData["OrderId"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
                                     QCman = string.IsNullOrEmpty(SqlData["QCMan"].ToString()) ? "N/A" : SqlData["QCMan"].ToString()
                                 });
                             }
@@ -1097,33 +1097,68 @@ namespace PMCDash.Controllers
             var SqlStr = "";
             var cmd1 = "";
             var cmd2 = "";
-            if (userdata.GroupId.ToString().Trim() == "2")//給生館跳製程權限
+            //if (userdata.GroupId.ToString().Trim() == "2")//給生館跳製程權限
+            //{
+            //    if (Event != "3")
+            //    {
+            //        cmd1 = $"where b.WIPEvent={Event}";
+            //        if(_ConnectStr.LockSequence==0)
+            //        {
+            //            cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
+            //        }
+            //        else
+            //        {
+            //            cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName AND aa.TOTALDONE=aa.Range";
+            //        }
+
+            //    }
+            //    else
+            //    {
+            //        cmd1 = $"where b.WIPEvent={Event}";
+            //        cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
+            //    }
+
+            //}
+            //else
+            //{
+            //    if (Event != "3")
+            //    {
+            //        cmd1 = $"where b.WIPEvent!=3";
+            //        // 鎖定前後製程卡關(只能看到當前未作的第一道製程)
+            //        if(_ConnectStr.LockSequence==0)
+            //        {
+            //            cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
+            //        }
+            //        else
+            //        {
+            //            cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName AND aa.TOTALDONE=aa.Range";
+            //        }
+            //    }
+            //    else
+            //    {
+            //        cmd1 = $"where b.WIPEvent=3";
+            //        cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
+            //    }
+            //}
+
+            //2025.01.23更新
+            if (Event != "3")
             {
-                if (Event != "3")
+                cmd1 = $"where b.WIPEvent={Event}";
+                if (_ConnectStr.LockSequence == 0)
                 {
-                    cmd1 = $"where b.WIPEvent={Event}";
-                    cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName AND aa.TOTALDONE=aa.Range";
+                    cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
                 }
                 else
                 {
-                    cmd1 = $"where b.WIPEvent={Event}";
-                    cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
+                    cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName AND aa.TOTALDONE=aa.Range";
                 }
-                
+
             }
             else
             {
-                if (Event != "3")
-                {
-                    cmd1 = $"where b.WIPEvent!=3";
-                    cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName AND aa.TOTALDONE=aa.Range";
-                    //cmd2 = $"where rn=1 and WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
-                }
-                else
-                {
-                    cmd1 = $"where b.WIPEvent=3";
-                    cmd2 = $"where WIPEvent={Event} and aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
-                }
+                cmd1 = $"where b.WIPEvent={Event}";
+                cmd2 = $"where aa.OrderID='{OrderId}' and bb.GroupSeq=@GroupName";
             }
 
             SqlStr = @$";WITH cte AS
@@ -1225,8 +1260,8 @@ namespace PMCDash.Controllers
                                     RequireNum = string.IsNullOrEmpty(SqlData["OrderQTY"].ToString().Trim()) ? "N/A" : SqlData["OrderQTY"].ToString().Trim(),
                                     CompleteNum = string.IsNullOrEmpty(SqlData["QtyGood"].ToString().Trim()) ? "N/A" : SqlData["QtyGood"].ToString().Trim(),
                                     DefectiveNum = string.IsNullOrEmpty(SqlData["QtyBad"].ToString().Trim()) ? "N/A" : SqlData["QtyBad"].ToString().Trim(),
-                                    IsQC = "N/A",
-                                    //IsQC = QCStatus(IsQCDone_2(SqlData["QC_count"].ToString(), SqlData["QCv_count"].ToString())),
+                                    //IsQC = "N/A",
+                                    IsQC = QCStatus(IsQCDone(SqlData["OrderId"].ToString().Trim(), SqlData["OPID"].ToString().Trim()).ToString()),
                                     QCman = string.IsNullOrEmpty(SqlData["QCMan"].ToString()) ? "N/A" : SqlData["QCMan"].ToString()
                                 });
                             }
@@ -1363,9 +1398,10 @@ namespace PMCDash.Controllers
             string result = "";
             int res = 0;
             DateTime dtDate;
+            DateTime DoneDate;
             if (_ConnectStr.Customer == 0)
             {
-                if (DateTime.TryParse(DeadLine_t, out dtDate))
+                if (DateTime.TryParse(DeadLine_t, out dtDate) && DateTime.TryParse(WillDone_t, out DoneDate))
                 {
                     DateTime start = Convert.ToDateTime(DeadLine_t);
 
@@ -1389,7 +1425,7 @@ namespace PMCDash.Controllers
             }
             else
             {
-                if (DateTime.TryParse(DeadLine_t, out dtDate))
+                if (DateTime.TryParse(DeadLine_t, out dtDate) && DateTime.TryParse(WillDone_t, out DoneDate))
                 {
                     DateTime start = Convert.ToDateTime(DeadLine_t);
 
@@ -1742,7 +1778,7 @@ namespace PMCDash.Controllers
             //{
             //    return result;
             //}
-
+            string Addtext = "";//where b.WIPEvent!=3
             var SqlStr = "";
             SqlStr = @$";WITH cte AS
                         (
@@ -1767,7 +1803,7 @@ namespace PMCDash.Controllers
 	                        left join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
                             left join {_ConnectStr.APSDB}.[dbo].QCAssignment as f on a.OrderID=f.WorkOrderID and a.OPID=f.OPID
                             left join {_ConnectStr.APSDB}.[dbo].OrderOverview as g on a.ERPOrderID=g.OrderID
-	                        where b.WIPEvent!=3) as a
+	                        {Addtext}) as a
                         )
                         SELECT *
                         FROM cte as aa
@@ -1938,7 +1974,13 @@ namespace PMCDash.Controllers
                             while (SqlData.Read())
                             {
                                 bool enable = true;
-                                if (SqlData["WIPEvent"].ToString().Trim() == "0") enable = false;
+                                //if (SqlData["WIPEvent"].ToString().Trim() == "0" || SqlData["WIPEvent"].ToString().Trim() == "3")
+
+                                if (SqlData["WIPEvent"].ToString().Trim() == "0")
+                                {
+                                    enable = false;
+                                }
+                                
                                 result.Add(new QC
                                 {
                                     QCPointName = checkNoword(SqlData["QCPointName"].ToString().Trim()),
@@ -2379,23 +2421,23 @@ namespace PMCDash.Controllers
             string result = "";
             int EffectRow = 0;
             UserData userData = UserInfo();
-            //判斷待機是否已經存在
-
-            //DECLARE @OrderID  NVARCHAR(30)
-            //SET @OrderID  =(SELECT TOP(1) OrderID FROM WIPLog WHERE StaffID=@StaffID and WIPEvent=1 ORDER BY CreateTime DESC)
-            //DECLARE @OPID  FLOAT
-            //SET @OPID=(SELECT TOP(1) OPID FROM WIPLog WHERE StaffID=@StaffID and WIPEvent=1 ORDER BY CreateTime DESC)
+            //判斷待機是否已經存在(若有符合endtime為null，則先設定endtime為現在時間，再新增一筆)
             string SqlStr = @$"
 
-                        IF NOT EXISTS(SELECT * FROM {_ConnectStr.APSDB}.[dbo].[IdleReasonBinding] WHERE [OrderID]=@OrderID AND [OPID]=@OPID AND ReasonCode=@ReasonCode AND StaffID=@StaffID)
+                        IF NOT EXISTS(SELECT * FROM {_ConnectStr.APSDB}.[dbo].[IdleReasonBinding] WHERE [OrderID]=@OrderID AND [OPID]=@OPID AND StaffID=@StaffID AND Device=@Device 
+                                      AND StartTime is not null AND EndTime is null)
                             BEGIN 
                                 INSERT INTO {_ConnectStr.APSDB}.[dbo].[IdleReasonBinding] ([OrderID],[OPID],[StartTime],[EndTime],[ReasonCode],[StaffID],[Device],[Updated])
                                 VALUES (@OrderID, @OPID, GETDATE(), NULL, @ReasonCode, @StaffID,@Device, 0);
                             END 
                         ELSE
                             BEGIN
-	                             UPDATE {_ConnectStr.APSDB}.[dbo].[IdleReasonBinding] SET [StartTime]=GETDATE(), [ReasonCode]=@ReasonCode, [Updated]+=1
-		                         WHERE [OrderID]=@OrderID AND [OPID]=@OPID AND [StaffID]=@StaffID;
+	                             UPDATE {_ConnectStr.APSDB}.[dbo].[IdleReasonBinding] SET EndTime=GETDATE(), Updated = 1
+                                 WHERE [OrderID]=@OrderID AND [OPID]=@OPID AND ReasonCode=@ReasonCode AND StaffID=@StaffID AND Device=@Device 
+                                 AND StartTime is not null AND EndTime is null;
+                                 
+                                 INSERT INTO {_ConnectStr.APSDB}.[dbo].[IdleReasonBinding] ([OrderID],[OPID],[StartTime],[EndTime],[ReasonCode],[StaffID],[Device],[Updated])
+                                 VALUES (@OrderID, @OPID, GETDATE(), NULL, @ReasonCode, @StaffID,@Device, 0);
                             END";
             using (SqlConnection conn = new SqlConnection(_ConnectStr.Local))
             {
@@ -2475,7 +2517,7 @@ namespace PMCDash.Controllers
             string result = "Update Failed!";
             int EffectRow = 0;
             UserData userdata = UserInfo();
-            //確認一下WIP是否已經存在報工資料
+            //確認一下WIP是否已經存在報工資料  & 更新待機紀錄
             var SqlStr = @$" IF EXISTS(SELECT *  FROM {_ConnectStr.APSDB}.[dbo].[WIP] WHERE OrderID=@OrderID AND OPID=@OPID)
 	                            BEGIN
 		                            UPDATE {_ConnectStr.APSDB}.[dbo].[WIP]
@@ -2492,6 +2534,9 @@ namespace PMCDash.Controllers
 		                            WHERE DeviceID=(SELECT TOP(1) ID FROM {_ConnectStr.APSDB}.dbo.Device WHERE remark=@Device);
 
                                     UPDATE {_ConnectStr.APSDB}.[dbo].[Assignment] SET Operator = @UserID WHERE OrderID = @OrderID AND OPID= @OPID
+
+                                    UPDATE {_ConnectStr.APSDB}.[dbo].[IdleReasonBinding] SET EndTime=GETDATE(), Updated = 1
+                                                                WHERE StaffID = @StaffID AND EndTime is null AND OrderID=@OrderID AND OPID=@OPID AND Device=@Device
 	                            END";
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
@@ -2503,13 +2548,13 @@ namespace PMCDash.Controllers
                     comm.Parameters.Add(("@OPID"), SqlDbType.NVarChar).Value = OPId;
                     comm.Parameters.Add(("@Device"), SqlDbType.VarChar).Value = Device;
                     comm.Parameters.Add(("@UserID"), SqlDbType.Char).Value = userdata.User_Id;
+                    comm.Parameters.Add(("@StaffID"), SqlDbType.Int).Value = userdata.User_Id;
                     EffectRow = Convert.ToInt32(comm.ExecuteNonQuery());
                 }
             }
             if (EffectRow > 0)
             {
                 result = "Update Successful!";
-                //UpdateERPOrderStatus(OrderID, "6");
                 try
                 {
                     UpdateERPOrderStatus(OrderID, OPId, 6);
@@ -2527,20 +2572,13 @@ namespace PMCDash.Controllers
         }
 
         /// <summary>
-        /// 填寫QCPoint
+        /// 更新量測數值
         /// </summary>
         /// <param name="request"></param>
         /// <returns></returns>
         [HttpPost("UpdateQCPoint")]
         public string UpdateQCPoint(WorkQCReportRequest request)
         {
-            //先檢查是否已經有data，如果沒有要先insert，如果有要update value和 lastupdatetime
-            //判斷是否有QC權限
-            //bool Valid = ValidQCOrder();
-            //if (Valid == false)
-            //{
-            //    return Unauthorized();
-            //}
             string result = "Update Failed!";
             UserData userData = UserInfo();
             int EffectRow = 0;
@@ -2581,27 +2619,7 @@ namespace PMCDash.Controllers
                                       order by ProcessName,QCPoint)
                                 END";
 
-            ////Ver1. SQL語法
-            //SqlStr = @$"IF NOT EXISTS(SELECT * FROM {_ConnectStr.APSDB}.[dbo].[QCPointValue] WHERE WorkOrderID = @OrderID AND OPID = @OPId AND QCPoint = (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName))
-            //                    BEGIN 
-            //                         INSERT INTO {_ConnectStr.APSDB}.[dbo].[QCPointValue]
-            //                         ([WorkOrderID], [OPID], [MAKTX], [QCPoint], [QCPointValue], [QCToolId], [QCunit], [Createtime], [Lastupdatetime]) 
-            //                         VALUES
-            //                         (@OrderID, @OPId, @MAKTX, 
-            //                         (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName), 
-            //                         (@QCPointValue),
-            //                         @QCToolId, 
-            //                         (SELECT TOP(1)[unit] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE MAKTX=@MAKTX AND opid=@OPId AND QCPointName=@QCPointName)
-            //                         ,GETDATE() ,GETDATE()) 
-            //                    END 
-            //               ELSE
-            //                    BEGIN
-            //                         UPDATE {_ConnectStr.APSDB}.[dbo].[QCPointValue]
-            //                         SET QCPointValue = (@QCPointValue),
-            //                         Lastupdatetime = GETDATE()
-            //                         WHERE WorkOrderID = @OrderID AND OPID = @OPId AND MAKTX = @MAKTX 
-            //                         AND QCPoint = (SELECT TOP(1)[QCPoint] FROM {_ConnectStr.MRPDB}.[dbo].[QCrule] WHERE id=@OPId AND QCPointName=@QCPointName)
-            //                    END";
+            
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
                 using (var comm = new SqlCommand(SqlStr, conn))
@@ -2735,19 +2753,21 @@ namespace PMCDash.Controllers
 
             result = QCList(OrderID, OPId);
 
+            //沒有需檢驗項目
             if (result.Count == 0)
             {
                 ans = "N/A";
             }
             else
             {
-                //確認是否有量測點未量測
+                
                 if (result.Exists(x => x.QCPointName == "N/A"))
                 {
                     ans = "N/A";
                 }
                 else
                 {
+                    //確認是否有量測點未量測
                     if (result.Exists(x => x.QCPointValue == "N/A"))
                     {
                         ans = "False";
@@ -3000,7 +3020,7 @@ namespace PMCDash.Controllers
             public string FilePath { get; set; }
         }
 
-
+        
         /// <summary>
         /// 讀取量測設備取得數值
         /// </summary>

@@ -77,19 +77,6 @@ namespace PMCDash.Controllers.Part2
 
 
             var result = new List<QCWorkTask>();
-            //var sqlStr = $@"select DISTINCT a.OrderID,a.OPID,a.OPLTXA1,a.MAKTX,a.StartTime,a.EndTime,a.AssignDate, d.remark,d.GroupName, u.[user_name], wip.WIPEvent, wip.OrderQTY, wip.QtyTol, wip.QtyBad , wip.QtyGood , k.user_name as QCman,
-            //                Progress = cast( (cast(wip.QtyGood as float) + cast(wip.QtyBad as float)) / cast(a.OrderQTY as float) * 100 as int)
-            //                ,pt.Name
-            //                from {_ConnectStr.APSDB}.dbo.Assignment as a
-            //                inner join {_ConnectStr.APSDB}.dbo.WIP as wip ON a.OrderID = wip.OrderID and a.OPID = wip.OPID
-            //                LEFT join {_ConnectStr.APSDB}.dbo.QCAssignment as q on a.OrderID = q.WorkOrderID and a.OPID = q.OPID
-            //                LEFT JOIN {_ConnectStr.MRPDB}.dbo.QCrule as qcr on a.OPID=qcr.id
-            //                LEFT JOIN {_ConnectStr.APSDB}.dbo.QCPointValue as qcp ON a.OrderID=qcp.WorkOrderID AND qcp.OPID=qcr.id and qcp.QCPoint=qcr.QCPoint
-            //                left join {_ConnectStr.AccuntDB}.dbo.[User] as u on a.Operator = u.[user_id]
-            //                left join {_ConnectStr.APSDB}.dbo.Device as d on a.WorkGroup=d.remark
-            //                left join {_ConnectStr.AccuntDB}.[dbo].[User] as k on q.QCman=k.[user_id]
-            //                left join {_ConnectStr.MRPDB}.[dbo].[Part] as pt on a.MAKTX=pt.Number
-            //                where wip.WIPEvent in (1,2) and qcr.QCPointName is not null and {mod} ORDER BY a.AssignDate ASC";
             var sqlStr = $@"select DISTINCT a.OrderID,a.OPID,a.OPLTXA1,a.MAKTX,a.StartTime,a.EndTime,a.AssignDate, d.remark,d.GroupName, u.[user_name], wip.WIPEvent, wip.OrderQTY, wip.QtyTol, wip.QtyBad , wip.QtyGood , k.user_name as QCman,
                             Progress = cast( (cast(wip.QtyGood as float) + cast(wip.QtyBad as float)) / cast(a.OrderQTY as float) * 100 as int)
                             ,pt.Name
@@ -102,25 +89,10 @@ namespace PMCDash.Controllers.Part2
                             left join {_ConnectStr.APSDB}.dbo.Device as d on a.WorkGroup=d.remark
                             left join {_ConnectStr.AccuntDB}.[dbo].[User] as k on q.QCman=k.[user_id]
                             left join {_ConnectStr.MRPDB}.[dbo].[Part] as pt on a.MAKTX=pt.Number
-                            where wip.WIPEvent in (1,2) and qcr.QCPointName is not null ORDER BY a.AssignDate ASC";
+                            where wip.WIPEvent in (1,2,3) and qcr.QCPointName is not null ORDER BY a.AssignDate ASC";
 
 
             #region Ver.1 語法
-            //var sqlStr = $@"
-            //                select a.OrderID,a.OPID,a.OPLTXA1,a.MAKTX,a.StartTime,a.EndTime,a.AssignDate, d.remark,d.GroupName, u.[user_name], wip.WIPEvent, wip.OrderQTY, wip.QtyTol, wip.QtyBad , wip.QtyGood , k.user_name as QCman,
-            //                Progress = cast( (cast(wip.QtyGood as float) + cast(wip.QtyBad as float)) / cast(a.OrderQTY as float) * 100 as int)
-            //                ,pt.Name,qcr.QCPointName,qcp.QCPointValue
-            //                from {_ConnectStr.APSDB}.dbo.Assignment as a
-            //                inner join {_ConnectStr.APSDB}.dbo.WIP as wip ON a.OrderID = wip.OrderID and a.OPID = wip.OPID
-            //                LEFT join {_ConnectStr.APSDB}.dbo.QCAssignment as q on a.OrderID = q.WorkOrderID and a.OPID = q.OPID
-            //                LEFT JOIN {_ConnectStr.MRPDB}.dbo.QCrule as qcr on a.OPID=qcr.id
-            //                LEFT JOIN {_ConnectStr.APSDB}.dbo.QCPointValue as qcp ON a.OrderID=qcp.WorkOrderID AND qcp.OPID=qcr.OPID and qcp.QCPoint=qcr.QCPoint
-            //                left join {_ConnectStr.AccuntDB}.dbo.[User] as u on a.Operator = u.[user_id]
-            //                left join {_ConnectStr.APSDB}.dbo.Device as d on a.WorkGroup=d.remark
-            //                left join {_ConnectStr.AccuntDB}.[dbo].[User] as k on q.QCman=k.[user_id]
-            //                left join {_ConnectStr.MRPDB}.[dbo].[Part] as pt on a.MAKTX=pt.Number
-            //                where wip.WIPEvent in (1,2) and qcr.QCPointName is not null and {mod} ORDER BY a.AssignDate ASC
-            //                ";
             #endregion
             using (var conn = new SqlConnection(_ConnectStr.Local))
             {
@@ -229,8 +201,8 @@ namespace PMCDash.Controllers.Part2
             var result = new List<QC>();
             var SqlStr = @$"SELECT a.OrderID ,a.OPID,a.MAKTX,c.WIPEvent,b.QCPoint,b.QCPointName,b.QCLSL,b.QCUSL,d.QCPointValue,d.QCToolId,d.QCunit,d.Createtime,d.Lastupdatetime
                             FROM {_ConnectStr.APSDB}.dbo.Assignment as a
-                            INNER JOIN {_ConnectStr.MRPDB}.dbo.QCrule as b on  a.OPID=b.id
-                            LEFT JOIN {_ConnectStr.APSDB}.dbo.QCPointValue as d ON  a.OrderID=d.WorkOrderID AND b.id=d.OPID and b.QCPoint=d.QCPoint
+                            INNER JOIN {_ConnectStr.MRPDB}.dbo.QCrule as b on a.OPID=b.id
+                            LEFT JOIN {_ConnectStr.APSDB}.dbo.QCPointValue as d ON a.OrderID=d.WorkOrderID AND b.id=d.OPID and b.QCPoint=d.QCPoint
                             LEFT JOIN {_ConnectStr.APSDB}.dbo.WIP as c on a.OrderID=c.OrderID AND a.OPID=c.OPID
                             WHERE a.OrderID= @OrderID AND a.OPID= @OPId";
 
@@ -249,7 +221,11 @@ namespace PMCDash.Controllers.Part2
                             while (SqlData.Read())
                             {
                                 bool enable = true;
-                                if (SqlData["WIPEvent"].ToString().Trim() == "0" || SqlData["WIPEvent"].ToString().Trim() == "3") enable = false;
+                                //先開放完成的工單可以編輯檢驗數據|| SqlData["WIPEvent"].ToString().Trim() == "3"
+                                if (SqlData["WIPEvent"].ToString().Trim() == "0" )
+                                {
+                                    enable = false;
+                                }
                                 result.Add(new QC
                                 {
                                     QCPointName = checkNoword(SqlData["QCPointName"].ToString().Trim()),
@@ -360,7 +336,7 @@ namespace PMCDash.Controllers.Part2
             //{
             //    return result;
             //}
-
+            string AddString = "";//where b.WIPEvent!=3
             var SqlStr = "";
             SqlStr = @$";WITH cte AS
                         (
@@ -385,7 +361,7 @@ namespace PMCDash.Controllers.Part2
 	                        left join {_ConnectStr.APSDB}.[dbo].Device as d on a.WorkGroup=d.remark
                             left join {_ConnectStr.APSDB}.[dbo].QCAssignment as f on a.OrderID=f.WorkOrderID and a.OPID=f.OPID
                             left join {_ConnectStr.APSDB}.[dbo].OrderOverview as g on a.ERPOrderID=g.OrderID
-	                        where b.WIPEvent!=3) as a
+	                        {AddString}) as a
                         )
                         SELECT *
                         FROM cte as aa

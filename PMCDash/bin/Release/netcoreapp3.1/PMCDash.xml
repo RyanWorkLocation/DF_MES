@@ -639,7 +639,7 @@
         </member>
         <member name="M:PMCDash.Controllers.WorkReportController.UpdateQCPoint(PMCDash.Models.WorkQCReportRequest)">
             <summary>
-            填寫QCPoint
+            更新量測數值
             </summary>
             <param name="request"></param>
             <returns></returns>
@@ -1471,6 +1471,11 @@
         <member name="F:PMCDash.Models.ConnectStr.DateTimeNow">
             <summary>
             SSSSSSSSSSSSSSS
+            </summary>
+        </member>
+        <member name="F:PMCDash.Models.ConnectStr.LockSequence">
+            <summary>
+            是否有鎖前後製程(0:沒鎖全開, 1:有鎖)
             </summary>
         </member>
         <member name="P:PMCDash.Models.Machine.MachineName">

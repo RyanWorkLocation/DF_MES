@@ -37,6 +37,7 @@ namespace PMCDash.Models
             Debug = int.Parse(config["Debug"]);
             Customer = int.Parse(config["Customer"]);
             DateTimeNow = DateTime.Parse(config["DateTimeNow"]);
+            LockSequence = int.Parse(config["LockSequence"]);
 
         }
 
@@ -101,6 +102,11 @@ namespace PMCDash.Models
         /// SSSSSSSSSSSSSSS
         /// </summary>
         public readonly DateTime DateTimeNow = DateTime.Now;
+
+        /// <summary>
+        /// 是否有鎖前後製程(0:沒鎖全開, 1:有鎖)
+        /// </summary>
+        public readonly int LockSequence = 0;
 
     }
 }

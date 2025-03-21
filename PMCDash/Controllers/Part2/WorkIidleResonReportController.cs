@@ -99,13 +99,6 @@ namespace PMCDash.Controllers.Part2
                             {
                                 result.Add(new idleList
                                 {
-                                    //idletype = changeIdletypecode(SqlData["Category"].ToString()),
-                                    //idlereson_id = SqlData["ReasonCode"].ToString(),
-                                    //idlereson_name = SqlData["item"].ToString(),
-                                    //idle_start_time = checkNoword(SqlData["StartTime"].ToString()),
-                                    //idle_end_time = checkNoword(SqlData["EndTime"].ToString()),
-                                    //idle_first_report_time = checkNoword(DateTime.Now.ToString(_timeFormat)),
-                                    //idle_scend_report_time = checkNoword("")
                                     orderID = changeIdletypecode(SqlData["OrderID"].ToString().Trim()),
                                     opId = changeIdletypecode(SqlData["OPID"].ToString().Trim()),
                                     idletype = changeIdletypecode(SqlData["Category"].ToString().Trim()),
